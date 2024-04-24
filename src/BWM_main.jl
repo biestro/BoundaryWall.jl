@@ -5,7 +5,7 @@ If you use this, thank me at least!!
 Main functions used for the Boundary Wall method.
 """
 
-module BoundaryWall
+module BWM_main
 using StaticArrays, LinearAlgebra
 using SpecialFunctions
 using ThreadsX
