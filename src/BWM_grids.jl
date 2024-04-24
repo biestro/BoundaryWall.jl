@@ -1,9 +1,9 @@
 # Lattices and stuff
 
-module BWM_grids
+# module BWM_grids
 using StaticArrays
 
-export ObliqueGrid, RectangularGrid, CenteredRectangular, SquareGrid, HexagonalGrid, HoneyLattice, TriangularGrid, buildGrid
+# export ObliqueGrid, RectangularGrid, CenteredRectangular, SquareGrid, HexagonalGrid, HoneyLattice, TriangularGrid, buildGrid
 
 
 abstract type BravaisLattice end;
@@ -86,4 +86,4 @@ function buildGrid(g::HoneyLattice, _n::Int)
   return _centers
 end
 
-end
+# end

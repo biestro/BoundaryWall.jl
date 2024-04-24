@@ -5,7 +5,7 @@ If you use this, thank me at least!!
 Main functions used for the Boundary Wall method.
 """
 
-module BWM_main
+# module BWM_main
 using StaticArrays, LinearAlgebra
 using SpecialFunctions
 using ThreadsX
@@ -20,7 +20,7 @@ using HCubature
 
 using Interpolations
 
-export boundaryWallWave, boundaryWallVec, planeWave, gaussianWave, shapedWave, gradient
+# export boundaryWallWave, boundaryWallVec, planeWave, gaussianWave, shapedWave, gradient
 
 global eGamma = 0.57721566490153286060
 
@@ -981,4 +981,4 @@ function gradient(xdom::LinRange, ydom::LinRange, z::Vector{ComplexF64})
   return xs, ys, us, vs
 end
 
-end
+# end
