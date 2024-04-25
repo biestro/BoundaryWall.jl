@@ -15,6 +15,16 @@ struct ObliqueGrid <: BravaisLattice
   ϕ::Float64
 end
 
+"""
+  RectangularGrid(origin, a, b)
+ 
+Rectangular grid primitive.
+
+## Examples
+```julia
+g = RectangularGrid(SVector(0.0, 1.0), 2.5, 3.0)
+```
+"""
 struct RectangularGrid <: BravaisLattice
   o::SVector{2, Float64}
   a::Float64

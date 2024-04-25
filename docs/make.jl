@@ -19,8 +19,9 @@ makedocs(
          pages = Any[
                      "Home" => "index.md",
                      "Reference guide" => [
+                                           "Geometry" => "geometry.md",
                                            "Incident waves" => "incident.md",
-                                           "Geometry" => "geometry.md"
+                                           "Lattices" => "grids.md"
                                           ],
                      "API" => "api.md"
 

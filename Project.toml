@@ -5,6 +5,7 @@ version = "0.1.0"
 
 [deps]
 AbaqusReader = "bc6b9049-e460-56d6-94b4-a597b2c0390d"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 CircularArrays = "7a955b69-7140-5f4e-a0ed-f168c5e2e749"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 FLoops = "cc61a311-1640-44b5-9fba-1b764f453329"
@@ -22,3 +23,4 @@ SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
+WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
