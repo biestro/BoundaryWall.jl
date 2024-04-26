@@ -3,8 +3,7 @@ using StaticArrays: SVector
 using LinearAlgebra
 using Meshes
 
-include("../src/BWM_geometry.jl")
-include("../src/BoundaryWall.jl")
+using BoundaryWall
 
 begin # definitions
 HBAR        = 1.0
@@ -31,7 +30,7 @@ end
 ################################################################################
 
 # builtin geometry (parabolic billiard)
-y, x,ym, xm, distance_matrix, arc_lengths = BWM_geometry.createConfocalBilliard(2.0, 3.0, N)
+y, x,ym, xm, distance_matrix, arc_lengths = createConfocalBilliard(2.0, 3.0, N)
 
 # domain
 x0, xf = (-8.5, 8.5)
@@ -47,34 +46,34 @@ XDOM, YDOM = first.(COORDS), last.(COORDS)
 banded = 2
 
 
-@time wave = BoundaryWall.boundaryWallWave(waveVector, (k,r)->BoundaryWall.planeWave(k,r), x, y, xm, ym, XDOM, YDOM, SIGMA, arc_lengths, distance_matrix, length(arc_lengths), N, banded, Inf);
+@time wave = boundaryWallWave(waveVector, (k,r)->BoundaryWall.planeWave(k,r), x, y, xm, ym, XDOM, YDOM, SIGMA, arc_lengths, distance_matrix, length(arc_lengths), N, banded, Inf);
 
 # xp, yp, u, v = BoundaryWall.gradient(xdom, ydom, wave)
 
 
+heatmap(xdom, ydom,abs2.(reshape(wave, NDOM, NDOM)))
 let 
-  fig = Figure(size=(600,600))
+  fig = Figure(size=(500,500))
   ax = Axis(fig[1,1],
-        xtickalign=1,ytickalign=1,
-        xticksmirrored=1,yticksmirrored=1,
-        xgridvisible=false, ygridvisible=false,
-        # xticklabelsvisible=false,yticklabelsvisible=false,
-        xminorticksvisible=true,yminorticksvisible=true,
-        xminortickalign=1,
-        yminortickalign=1,
+        # xtickalign=1,ytickalign=1,
+        # xticksmirrored=1,yticksmirrored=1,
+        # xgridvisible=false, ygridvisible=false,
+        # # xticklabelsvisible=false,yticklabelsvisible=false,
+        # xminorticksvisible=true,yminorticksvisible=true,
+        # xminortickalign=1,
+        # yminortickalign=1,
         xminorticks=IntervalsBetween(2),
         yminorticks=IntervalsBetween(2),
         )
   # heatmap!(ax, xdom[:], ydom[:], real(wave), colormap=:dense)
   # scatter!(ax, XDOM, YDOM, color=real)
-  ax.title = "Band integrated |i - j|<$banded"
   # viz!(ax, MESH, color=abs2.(wave), shading=NoShading, colormap=:linear_kbgyw_5_98_c62_n256)
-  contourf!(ax, xdom, ydom, (abs2.(reshape(wave, NDOM, NDOM))).^0.4, levels=4, colormap=:julia_colorscheme)
+  heatmap!(ax, xdom, ydom, abs2.(reshape(wave, NDOM, NDOM)),interpolate=true, colormap=:turbo)
   # viz!(ax[3], MESH, color=abs2.(wave), shading=false, colorscheme=:dense)
   
   
   lines!(ax, x, y,color=:white)
   ax.aspect=DataAspect() 
-  save("./docs/src/assets/logo.pdf", fig)
+  save("./docs/src/assets/wave.png", fig)
   fig
 end

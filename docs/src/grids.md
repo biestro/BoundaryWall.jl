@@ -11,26 +11,6 @@ their repetition scheme.
 
 ## Constructors
 
-```@docs
-RectangularGrid
-```
-
-```@docs
-SquareGrid
-```
-
-```@docs
-HexagonalGrid
-```
-
-```@docs
-TriangularGrid
-```
-
-```@docs
-HoneyLattice
-```
-
 ## Methods
 
 All `buildGrid` functions construct a grid with $n\\_1\times n\\_2$ 
