@@ -2,6 +2,8 @@
 
 *Scattering Toolbox written in Julia.*
 
+Please read the tutorials while I finish the documentation.
+
 ## Overview
 
 **BoundaryWall.jl** provides a collection of algorithms and tools for 
@@ -27,6 +29,8 @@ section.
 If you have questions or would like to brainstorm ideas, don't hesitate 
 to contact me. I'd be happy to talk about the project and improve the
 toolbox in general.
+
+![Eigenstate](docs/src/assets/parabolic.gif)
 
 ## Installation
 
