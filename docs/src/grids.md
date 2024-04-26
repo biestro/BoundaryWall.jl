@@ -11,25 +11,25 @@ their repetition scheme.
 
 ## Constructors
 
-<!--```@docs-->
-<!--RectangularGrid-->
-<!--```-->
+```@docs
+RectangularGrid
+```
 
-<!--```@docs-->
-<!--SquareGrid-->
-<!--```-->
+```@docs
+SquareGrid
+```
 
-<!--```@docs-->
-<!--HexagonalGrid-->
-<!--```-->
+```@docs
+HexagonalGrid
+```
 
-<!--```@docs-->
-<!--TriangularGrid-->
-<!--```-->
+```@docs
+TriangularGrid
+```
 
-<!--```@docs-->
-<!--HoneyLattice-->
-<!--```-->
+```@docs
+HoneyLattice
+```
 
 ## Methods
 

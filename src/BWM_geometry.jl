@@ -42,9 +42,9 @@ function createEllipse(r::Float64, μ::Float64, θ::LinRange, ϕ::Float64, SHIFT
   u,v    = @. x * cos(ϕ) - y*sin(ϕ), x*sin(ϕ) + y*cos(ϕ) # rotate
   u = u .+ SHIFT[1]
   v = v .+ SHIFT[2]
-  u,v    = BWM_geometry.divideResonatorCurve(u,v,length(u))
-  xm, ym = BWM_geometry.calcMidpoints(u,v)
-  ds     = BWM_geometry.calcArcLength(u,v)
+  u,v    = divideResonatorCurve(u,v,length(u))
+  xm, ym = calcMidpoints(u,v)
+  ds     = calcArcLength(u,v)
   return u,v,xm,ym,ds
 end
 
@@ -1019,7 +1019,7 @@ function circularLatticeMesh(centers_3d::Vector{Vector{Float64}},
   
   plotProject!(scattering_project, 5)
   
-  _points, _connec = BWM_geometry.abaqusToMeshes("./out/lattice.inp")
+  _points, _connec = abaqusToMeshes("./out/lattice.inp")
   _mesh = Meshes.SimpleMesh(_points, _connec)
   return _mesh
   end

@@ -9,3 +9,7 @@ can also be used as the impinging wave.
 planeWave
 # planeWave(k::SVector{2,Float64}, r::SVector{2,Float64})
 ```
+
+## Beam shaping
+
+Here, we deal with only real valued angle beam shaping (contrary to )
