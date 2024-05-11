@@ -11,7 +11,7 @@ N = 20
 R = 2.0
 σ = -0.25im
 T = LinRange(0, 2pi, N)
-centers = buildGrid(RectangularGrid((0.0, 0.0),5.0, 5.0), 8,8)
+centers = buildGrid(HexagonalGrid((0.0, 0.0),5.0), 8,8)
 Δr = maximum(centers) ./ 2
 map!(c->c .- Δr, centers, centers)
 indices_to_delete = sort(sample(eachindex(centers), replace=false, length(centers)÷4))
@@ -19,7 +19,7 @@ indices_to_delete = sort(sample(eachindex(centers), replace=false, length(center
 
 
 
-circ = [createEllipse(R,R*1/3, T, -i*pi/2, c) for (c,i) in zip(centers, LinRange(0,1, length(centers)))]
+circ = [createEllipse(R,R*1/3, T, pi/2, c) for (c,i) in zip(centers, LinRange(0,1, length(centers)))]
 x  = vcat(getindex.(circ, 1)...)
 y  = vcat(getindex.(circ, 2)...)
 xm = vcat(getindex.(circ, 3)...)
@@ -33,11 +33,9 @@ f
 end
 
 
-
-
 Nx, Ny = 250,150
-xdom = LinRange(floor(minimum(x))-1,ceil(maximum(x))+1, Nx)
-ydom = LinRange(floor(minimum(y))-1,ceil(maximum(y))+1, Ny)
+xdom = LinRange(floor(minimum(x))-2,ceil(maximum(x))+2, Nx)
+ydom = LinRange(floor(minimum(y))-2,ceil(maximum(y))+2, Ny)
 MESH = RectilinearGrid(xdom, ydom)
 MESH = SimpleMesh(vertices(MESH), MESH.topology)
 # COORDS = coordinates.(centroid.(MESH))
@@ -59,10 +57,10 @@ banded = 2
 let
   fig = Figure()
   ax  = Axis(fig[1,1], title="banded (using |i-j|<$banded)")
-  viz!(ax, MESH, color=abs2.(wave), colormap=:amp)
+  viz!(ax, MESH, color=abs2.(wave), colormap=:linear_kbgyw_5_98_c62_n256)
   ax.aspect=DataAspect() 
   # [lines!(ax, GeometryUtils.createCircle(R, LinRange(-pi, pi, 50), c)[1:2]..., color=:black) for ax in ax, c in centers]
-  [lines!(ax, createEllipse(R,R*2/3, T, -i*pi/2, c)[1:2]..., color=:black) for (c,i) in zip(centers, LinRange(0,1, length(centers)))]
+  [lines!(ax, createEllipse(R,R*2/3, T, -i*pi/2, c)[1:2]..., color=:white) for (c,i) in zip(centers, LinRange(0,1, length(centers)))]
   
   fig
 end

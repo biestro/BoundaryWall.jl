@@ -1,112 +1,102 @@
+# TODO: update boundaryWallWave to take r::Vector{SVector{2,Float64}} instead of two vectors x,y
+
 using GLMakie
-using StaticArrays
-using Meshes
-using QuadGK
+using StaticArrays: SVector
 using LinearAlgebra
+using Meshes
 
-include("../src/BoundaryWall.jl")
-include("../src/GeometryUtils.jl")
+using BoundaryWall
 
-N = 250
-# circ = [GeometryUtils.createEllipse(-2.5, 7.0, LinRange(pi/2, 3pi/2, N), 0.0, SVector(x0,0.0)) for x0 in [0.0, -0.5]]
-circ = [GeometryUtils.createEllipse(-1.0, 1.5, LinRange(-pi, pi, N), 0.0, SVector(0.0,0.0))]
-x  = vcat(getindex.(circ, 1)...)
-y  = vcat(getindex.(circ, 2)...)
-xm = vcat(getindex.(circ, 3)...)
-ym = vcat(getindex.(circ, 4)...)
-ds = vcat(getindex.(circ, 5)...)
-rij = GeometryUtils.calcDistances(xm,ym)
+begin # definitions
+HBAR        = 1.0
+MASS        = HBAR/2
+SIGMA       = (2*MASS/HBAR^2)*(1/4*im)
+N           = 100
+NX          = 350
+NY          = 350
+ϕ           = 0.0
+waveVector  = 15*SVector(cosd(ϕ), sind(ϕ)) # parabolic billiard eigenstate
+end
 
-lines(x,y)
+nPi=8
+# centers = reverse(SVector.(createCircle(4.0, LinRange(pi-pi/8, -pi/2+pi/8, nPi), SVector(0.0, 0.0))[1:2]...))
+# barrier = [createEllipse(0.0, 5.0, LinRange(-pi/2,pi/2,N), th, SVector(x0, 0.0)) for (x0, th) in zip([0.0, 2.0], [pi/6, pi/4])]
+barrier = [createEllipse(3.5, 3.5, LinRange(pi+pi/8,-pi/2+pi/8,N),0.0, SVector(0.0, 0.0))]
+x  = vcat(getindex.(barrier, 1)...)
+y  = vcat(getindex.(barrier, 2)...)
+xm = vcat(getindex.(barrier, 3)...)
+ym = vcat(getindex.(barrier, 4)...)
+ds = vcat(getindex.(barrier, 5)...)
+rij = calcDistances(xm, ym)
 
-Nx, Ny = 100,100
-xdom = LinRange(-1.5,1.5, Nx)
-ydom = LinRange(-2.0,2.0, Ny)
-MESH = RectilinearGrid(xdom, ydom)
-MESH = SimpleMesh(vertices(MESH), MESH.topology)
-# COORDS = coordinates.(centroid.(MESH))
-COORDS = SVector.(coordinates.(MESH.vertices))
-XDOM, YDOM = first.(COORDS), last.(COORDS)
-
-planeIncidence(k::SVector, x::Float64, y::Float64) = exp(- 1im  *  (k[1] * x + k[2] * y ));
-planeIncidence(k::SVector, x::T, y::T) where T <:SArray{Tuple{}, Float64, 0, 1} = exp.(- 1im  *  (k[1] * x + k[2] * y ));
-
-
-shapedKernel(k::Float64, r::SVector{2, Float64}, θ::Float64,β::Float64, ω::Float64) = exp( -((θ-β)/ω) ^2) * planeIncidence(k*SVector(cos(θ), sin(θ)), r[1], r[2])
-gaussianKernel(k::Float64, r::SVector{2, Float64}, θ::Float64, β::Float64, ω::Float64) = pi * ω^2 * exp(-(ω*(θ-β)/2)^2) * planeIncidence(k*SVector(cos(θ), sin(θ)), r[1], r[2])
-
-using HCubature
-"""
-from the right
-"""
-# shapedIncidence(k::Float64, r::SVector{2,Float64}, r0::SVector{2,Float64}, β::Float64, ω::Float64) = 1/2π * first(quadgk(t -> shapedKernel(k, r - r0, t, β , ω), -π/2+β, π/2+β))
-shapedIncidence(k::Float64, r::SVector{2,Float64}, r0::SVector{2,Float64}, β::Float64, ω::Float64) = 1/2π * first(hquadrature(t -> shapedKernel(k, r - r0, t, β , ω), -π/2+β, π/2+β))
-gaussianIncidence(k::Float64, r::SVector{2,Float64}, r0::SVector{2,Float64}, β::Float64, ω::Float64) = 1/2π * first(hquadrature(t -> gaussianKernel(k, r - r0, t, β , ω), -π/2+β, π/2+β))
-
-# shapedIncidence(20.0, COORDS, SVector(-1.0, 0.0), pi/3, 1.0)
-using BenchmarkTools
-
-waveVec = 5.1735*SVector(cosd(45), sind(45))
-incidentWave(k::SVector{2, Float64}, x::Float64, y::Float64) = shapedIncidence(norm(k), SVector(x,y), SVector(0.0, 0.0), pi/2 - atan(k...), 0.5)
-gaussianWave(k::SVector{2, Float64}, x::Float64, y::Float64) = gaussianIncidence(norm(k), SVector(x,y), SVector(0.0, 0.0), pi/2-atan(k...), 10.14)
-
-
-incident = [gaussianWave(waveVec, r[1], r[2]) for r in COORDS]
 let
-GC.gc();
-f,ax=viz(MESH, color=real(incident))
-lines!(ax,x,y)
-xlims!(ax, minimum(XDOM), maximum(XDOM))
-ylims!(ax, minimum(YDOM), maximum(YDOM))
+f,ax=scatter(x, y, colormap=:turbo, color=1:length(ds))
 ax.aspect=DataAspect()
 f
 end
+# domain
+x0, xf = (-4, 4)
+y0, yf = (-4, 4)
+xdom = LinRange(x0, xf, NX)
+ydom = LinRange(y0, yf, NY)
+GRID = RectilinearGrid(xdom, ydom)
+MESH = SimpleMesh(vertices(GRID), GRID.topology)
+COORDS = SVector.(coordinates.(vertices(MESH)))
+
+XDOM, YDOM = first.(COORDS), last.(COORDS)
+
+banded = 5
 
 
-banded = 10
-wave = BoundaryWall.boundaryWallWave(
-  waveVec,
-  incidentWave,
-  x,
-  y,
-  xm,
-  ym,
-  XDOM, 
-  YDOM,
-  -0.25im,
-  ds,
-  rij,
-  length(ds),
-  N,
-  banded,
-  6.0
-)
+@time wave = boundaryWallWave(waveVector, (k,r)->gaussianWave(-k,r - SVector(xm[end-10], ym[end-10]), 10.0; abstol=1e-8), x, y, xm, ym, XDOM, YDOM, SIGMA, ds, rij, length(ds), N, banded, Inf);
 
-function plotWave(_m::SimpleMesh,_wave::Union{Vector{ComplexF64}, Vector{Float64}}, _c::Symbol)
-    _fig = Figure()    
-    _ax  = Axis(_fig[1,1], xticksmirrored=true, yticksmirrored=true, 
-    xminorticksvisible=true, yminorticksvisible=true,
-    # xtickalign=1, ytickalign=1,
-    # xminortickalign=1, yminortickalign=1,
-    xgridvisible=false,ygridvisible=false)
-    viz!(_ax, _m; color=_wave,colormap=_c)
-    Colorbar(_fig[1,2], colorrange=(minimum(_wave), maximum(_wave)), colormap=_c)
-    _ax.aspect=DataAspect()
-    return _fig
-
-end
+# wave path
+xp, yp, u, v = BoundaryWall.gradient(xdom, ydom, wave)
 
 
-let
+let 
+  fig = Figure(size=(600,600), background_color=:transparent)
+  ax = Axis(fig[1,1],                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+        xtickalign=1,ytickalign=1,
+        xticksmirrored=1,yticksmirrored=1,  
+        xgridvisible=false, ygridvisible=false,
+        # xticklabelsvisible=false,yticklabelsvisible=false,
+        xminorticksvisible=true,yminorticksvisible=true,
+        xminortickalign=1,
+        yminortickalign=1,
+        xminorticks=IntervalsBetween(2),
+        yminorticks=IntervalsBetween(2),
+        )
+  # ax.title = "Band integrated |i - j|<$banded"
+  # viz!(ax, MESH, color=abs2.(wave), shading=NoShading, colormap=:turbo)
+  heatmap!(ax,xdom, ydom, imag.(reshape(wave, NX, NY)), interpolate=true, colormap=:cubehelix)
+  # heatmap!(ax,xdom, ydom, real.(reshape(wave, NX, NY)), interpolate=false, colormap=:linear_kbgyw_5_98_c62_n256)
+
+  k = 8
   
-f=plotWave(MESH, abs2.(wave), :turbo)
-
-# scatter!(x,y, color=(:white,1.0), markersize=5)
-# [lines!(x[n:n+N], y[n:n+N], color=:black) for n in [1,N+2]]
-lines!(x,y,color=:white)
-xlims!(minimum(XDOM), maximum(XDOM))
-ylims!(minimum(YDOM), maximum(YDOM))
-f
+  hidedecorations!(ax)
+  hidespines!(ax)
+  # XP = xp[1:k:end, 1:k:end]
+  # YP = yp[1:k:end, 1:k:end]
+  # U  = u[1:k:end, 1:k:end]
+  # V  = v[1:k:end, 1:k:end]
+  # arrows!(ax, Makie.Point2f.(XP, YP)[:],Makie.Point2f.(U,V)[:], normalize=true,lengthscale=1,color=(:white, 0.5))
+  # [lines!(ax, createEllipse(0.0, 7.0, LinRange(-pi/2,pi/2,N), pi/4, SVector(x0, 0.0))[1:2]...,color=(:white,1.0)) for x0 in centers[1]]
+  # [lines!(ax, createEllipse(0.0, 1.0, LinRange(-pi/2,pi/2,N), th, SVector(x0, 0.0))[1:2]..., color=:white) for (x0, th) in zip([0.0, 2.0], [pi/6, pi/4])]
+  lines!(ax, x,y, color=:white)
+  xlims!(ax, xdom[1], xdom[end])
+  ylims!(ax, ydom[1], ydom[end])
+  ax.aspect=DataAspect() 
+  # save("wallpaper_3.png", fig, px_per_unit=4)
+  fig
 end
 
-lines(x[1:N+2], y[1:N+2])
+# quiver plot
+θ = LinRange(-pi, pi/2, 300)
+x,y = cos.(θ),sin.(θ)
+
+x,y = divideResonatorCurve(x,y, 300)
+xm,ym = calcMidpoints(x, y)
+ds = calcArcLength(x,y)
+rij = calcDistances(xm, ym)
+lines(ds)

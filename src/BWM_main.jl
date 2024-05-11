@@ -17,6 +17,9 @@ using FLoops
 using LoopVectorization
 using CircularArrays
 using HCubature
+using StatsBase
+using .Threads
+using SIMD
 
 using Interpolations
 
@@ -53,6 +56,8 @@ Be mindful of the convergence, as some expansions might not converge fast enough
 """
 gaussianWave(k::SVector{2, Float64}, r::SVector{2, Float64}, ω::Float64; abstol=0) = 1/2pi * first(hquadrature(t -> pi * ω^2 * exp(-(ω*(t-atan(k))/2)^2) * planeWave(norm(k)*SVector(cos(t),sin(t)),r), -pi/2+atan(k), pi/2+atan(k); atol=abstol))
 
+# gaussianWave(k::SVector{3, Float64}, r::SVector{3, Float64}, ω::Float64; abstol=0) = 1/2pi * first(hquadrature(t -> pi * ω^2 * exp(-(ω*(t-atan(k))/2)^2) * planeWave(norm(k)*SVector(cos(t),sin(t)),r), -pi/2+atan(k), pi/2+atan(k); atol=abstol))
+
 """Vaishnav et al. (2007). Matter-wave scattering and guiding by atomic arrays. PRA, doi:10.1103/physreva.76.013620"""
 shapedWave(k::SVector{2, Float64}, r::SVector{2, Float64}, ω::Float64; abstol=0) = 1/2pi * first(hquadrature(t -> exp(-((t-atan(k))/ω)^2) * planeWave(norm(k)*SVector(cos(t),sin(t)),r), -pi/2+atan(k), pi/2+atan(k); atol=abstol))
 
@@ -87,8 +92,8 @@ function calcMmatrix(waveNumber::Float64,
                      arcLengths::Vector,
                      dindex::StepRange)
 
-  Mij          = @. σ * BoundaryWall.calcGreenFun(waveNumber, rijMid) * arcLengths[1] #  arcLengths # multiplies cols by ds[j]
-  Mij[dindex] .= @. σ * BoundaryWall.calcGreenFun(waveNumber, arcLengths/2) * arcLengths[1] # arcLengths;
+  Mij          = @. σ * calcGreenFun(waveNumber, rijMid) * arcLengths[1] #  arcLengths # multiplies cols by ds[j]
+  Mij[dindex] .= @. σ * calcGreenFun(waveNumber, arcLengths/2) * arcLengths[1] # arcLengths;
   return Mij
 end
 
@@ -139,7 +144,8 @@ function calcMmatrix(waveNumber::Float64, σ::ComplexF64, ri::SVector{2,Float64}
   # M(k::Float64, ri::SVector{2,Float64}, r0::SVector{2,Float64}, r1::SVector{2, Float64}) = first(quadgk(t -> G0(k, ri, r(r0, r1, t)), 0.0, 0.5, 1.0)) * norm(r1 - r0)  # scaling
   
   # Integrate( G₀(k, r(t)) * dt, t∈(0, 1))
-  return σ * first(quadgk(t -> calcGreenFun(waveNumber, ri, r(r0, r1, t)), 0.0, 0.5, 1.0)) * norm(r1 - r0)  # scaling
+  # return σ * first(quadgk(t -> calcGreenFun(waveNumber, ri, r(r0, r1, t)), 0.0, 0.5, 1.0)) * norm(r1 - r0)  # scaling
+  return σ * first(hquadrature(t -> calcGreenFun(waveNumber, ri, r(r0, r1, t)), 0.0,  1.0)) * norm(r1 - r0)  # scaling
 end
 
 function calcMmatrix(type::Symbol, θ::Float64, waveNumber::Float64, σ::ComplexF64, ri::SVector{2,Float64}, r0::SVector{2,Float64}, r1::SVector{2, Float64})
@@ -147,7 +153,8 @@ function calcMmatrix(type::Symbol, θ::Float64, waveNumber::Float64, σ::Complex
   # M(k::Float64, ri::SVector{2,Float64}, r0::SVector{2,Float64}, r1::SVector{2, Float64}) = first(quadgk(t -> G0(k, ri, r(r0, r1, t)), 0.0, 0.5, 1.0)) * norm(r1 - r0)  # scaling
   
   # Integrate( G₀(k, r(t)) * dt, t∈(0, 1))
-  return σ * first(quadgk(t -> calcGreenFun(type, θ, waveNumber, norm(ri - r(r0, r1, t))), 0.0, 0.5, 1.0)) * norm(r1 - r0)  # scaling
+  # return σ * first(quadgk(t -> calcGreenFun(type, θ, waveNumber, norm(ri - r(r0, r1, t))), 0.0, 0.5, 1.0)) * norm(r1 - r0)  # scaling
+  return σ * first(hquadrature(t -> calcGreenFun(type, θ, waveNumber, norm(ri - r(r0, r1, t))), 0.0, 1.0)) * norm(r1 - r0)  # scaling
 end
 
 """
@@ -160,22 +167,38 @@ Band integrated M-matrix (see MGE da Luz, 1997). Banded M matrix.
 - `σ::ComplexF64`: Free particle Green's function parameter 
 - `rijMid::Matrix`: distance matrix between segments
 - `arcLengths::Vector`: self explanatory
-- `dindex::StepRange`: indexes for diagonal, supplied beforehand
 - `band::Int64`,
+- `_rm`::Vector{SVector{2, Float64}}, # rMid in tests
+- `_r`::CircularVector{SVector{2, Float64}, Vector{SVector{2, Float64}}},
+- `numSegments`::Int64,
 """
 function calcMmatrix(waveNumber::Float64,
                      σ::ComplexF64,
-                     rijMid::Matrix,
+                     rijMid::Union{Matrix, SizedMatrix},
                      arcLengths::Vector,
                      band::Int64,
                      _rm::Vector{SVector{2, Float64}}, # rMid in tests
                      _r::CircularVector{SVector{2, Float64}, Vector{SVector{2, Float64}}},
-                     numSegments) # rPos in tests
+                     numSegments::Int64) # rPos in tests
   
   @assert ((band > 0) && band < size(rijMid,1))
-  Mij          = @. σ * BoundaryWall.calcGreenFun(waveNumber, rijMid) * arcLengths[1] #  arcLengths # multiplies cols by ds[j]
-  [Mij[i,j] = calcMmatrix(waveNumber, σ, _rm[i], _r[_j], _r[_j+1]) for i in axes(Mij,1), (j,_j) in zip(axes(Mij, 2), segmentIterator(_r, numSegments)) if abs(i - j) < band]
+
+  # Mij          = SizedMatrix{numSegments, numSegments}(@. σ * calcGreenFun(waveNumber, rijMid) * arcLengths[1]) #  arcLengths # multiplies cols by ds[j]
+  Mij          = [σ * calcGreenFun(waveNumber, _rij)* arcLengths[1] for _rij in rijMid] #  arcLengths # multiplies cols by ds[j]
+  # Mij          = (@. σ * calcGreenFun(waveNumber, rijMid) * arcLengths[1]) #  arcLengths # multiplies cols by ds[j]
+  # Mij = SizedMatrix{numSegments, numSegments}(Mij)
+  # [Mij[i,j] = σ * calcGreenFun(waveNumber, rijMid[i,j]) * arcLengths[1] for i in 1:numSegments, j in 1:numSegments]
+  @threads for i in axes(Mij,1)
+    for (j,_j) in zip(axes(Mij, 2), segmentIterator(_r, numSegments)) 
+      if abs(i - j) < band
+        Mij[i,j] = σ * first(hquadrature(t -> calcGreenFun(waveNumber, norm(_rm[i] - r(_r[_j], _r[_j+1], t))), 0.0, 1.0)) * norm(_r[_j] - _r[_j+1])
+      end
+    end
+  end
+  # [Mij[i,j] = σ * first(hquadrature(t -> calcGreenFun(waveNumber, norm(_rm[i] - r(_r[_j], _r[_j+1], t))), 0.0, 1.0)) * norm(_r[_j] - _r[_j+1])] # scaling
   
+  # un buen de allocs se va a esto
+  # [Mij[i,j] = calcMmatrix(waveNumber, σ, _rm[i], _r[_j], _r[_j+1]) for i in axes(Mij,1), (j,_j) in zip(axes(Mij, 2), segmentIterator(_r, numSegments)) if abs(i - j) < band]
   return Mij
 end
 
@@ -203,8 +226,6 @@ function incidentWave(k::SVector, x::Float64, y::Float64)
   # return exp(-im * norm(k)*hypot(x, y - 1.6165807537309522))#/hypot(x, y - 25)
   # return gaussian(norm(k), x, y)
 end
-
-
 
 """
   `boundaryWallWave(waveVector,xBoundary,yBoundary,xMid,yMid,xDomain,yDomain,σ,arcLengths,numSegments,numSegmentsMod,band,potentialStrength)`
@@ -264,15 +285,29 @@ Mij = calcMmatrix(waveNumber, σ, rijMid, arcLengths, band, rMid, rPos, numSegme
 
 TPHI = calcTPHI(Mij, waveAtBoundary, potentialStrength)
 
-# potentialContribution = mapreduce( (j) -> σ * calcGreenFun.(waveNumber, hypot.(xDomain.-view(xMid,j)[1], yDomain.-view(yMid,j)[1])) * view(arcLengths,j)[1] * view(TPHI,j)[1] , +, 1:numSegments)
-# wave =  waveAtDomain + ThreadsX.mapreduce((j) -> σ * calcGreenFun.(waveNumber, hypot.(xDomain.-view(xMid,j)[1], yDomain.-view(yMid,j)[1])) * view(arcLengths,j)[1] * view(TPHI,j)[1],+, 1:numSegments)
-wave = waveAtDomain
-@inbounds for j in 1:numSegments
-  RR = @.  hypot(xDomain  - (@view xMid[j]), yDomain - (@view yMid[j]))
-  wave += @. σ * calcGreenFun(waveNumber,RR) * (@view arcLengths[j]) * (@view TPHI[j])
+# wave = zeros(ComplexF64, length(waveAtDomain))
+# wave = copy(waveAtDomain)
+# wave = zeros(ComplexF64,length(waveAtDomain))
+# wave = copy(waveAtDomain)
+# wave = @inbounds [ σ*first(hquadrature(t->calcGreenFun(waveNumber, _r, r(rPos[j], rPos[j+1], t)), 0.0, 1.0))  * TPHI[j] * norm(rPos[j] - rPos[j+1]) for j in 1:numSegments, _r in rDom]
+
+# wave = sum(wave, dims=1)[:]
+# wave += waveAtDomain
+@inbounds @threads for j in 1:numSegments
+#   # RR = @.  hypot(xDomain  - (@view xMid[j]), yDomain - (@view yMid[j]))
+#   # wave += @. σ * calcGreenFun(waveNumber,RR) * (@view arcLengths[j]) * (@view TPHI[j])
+  @inbounds for (i,_r) in enumerate(rDom)
+    if waveNumber*norm(rMid[j] - _r) < 0.5
+      # wave[i] += σ * calcGreenFun(waveNumber,norm(rMid[j] - _r)) * (arcLengths[j]) * (TPHI[j])
+      waveAtDomain[i] += σ*first(hquadrature(t->calcGreenFun(waveNumber, _r, r(rPos[j], rPos[j+1], t)), 0.0, 1.0))  * TPHI[j] * norm(rPos[j] - rPos[j+1])
+    else
+      waveAtDomain[i] += σ * calcGreenFun(waveNumber,norm(rMid[j] - _r)) * (arcLengths[j]) * (TPHI[j])
+    end
+
+  end
 end
 
-return wave
+return waveAtDomain
 end
 
 """
@@ -356,166 +391,166 @@ return wave
 end
 
 
-"""
-  `boundaryWallWave(waveVector,xMid, yMid, xDomain, yDomain, σ, rijMid, arcLengths, numSegments, dindex)`
+# """
+#   `boundaryWallWave(waveVector,xMid, yMid, xDomain, yDomain, σ, rijMid, arcLengths, numSegments, dindex)`
 
-Computes the scattered field by a wall (aka the Boundary Wall Method), assuming
-an infinite potential strength.
+# Computes the scattered field by a wall (aka the Boundary Wall Method), assuming
+# an infinite potential strength.
 
-# Arguments:
-- `waveVector::SVector{2,Float64}`: self explanatory
-- `xMid::Vector`: x coordinate of segment's midpoints
-- `yMid::Vector`: y coordinate of segment's midpoints
-- `xDomain::Vector,`: x coords for domain of evaluation
-- `yDomain::Vector`: y coords for domain of evaluation
-- `σ::ComplexF64`: free particle Green's function parameter
-- `rijMid::Matrix`: distance matrix between segments
-- `arcLengths::Vector`: length of segments
-- `numSegments::Int`: number of segments
-- `dindex::StepRange`: diagonal index supplied beforehand
-"""
-function boundaryWallWave(
-  waveVector::SVector{2,Float64},
-  xMid::Vector,
-  yMid::Vector,
-  xDomain::Vector, 
-  yDomain::Vector,
-  σ::ComplexF64,
-  rijMid::Matrix,
-  arcLengths::Vector,
-  numSegments::Int,
-  dindex::StepRange,
-  )
+# # Arguments:
+# - `waveVector::SVector{2,Float64}`: self explanatory
+# - `xMid::Vector`: x coordinate of segment's midpoints
+# - `yMid::Vector`: y coordinate of segment's midpoints
+# - `xDomain::Vector,`: x coords for domain of evaluation
+# - `yDomain::Vector`: y coords for domain of evaluation
+# - `σ::ComplexF64`: free particle Green's function parameter
+# - `rijMid::Matrix`: distance matrix between segments
+# - `arcLengths::Vector`: length of segments
+# - `numSegments::Int`: number of segments
+# - `dindex::StepRange`: diagonal index supplied beforehand
+# """
+# function boundaryWallWave(
+#   waveVector::SVector{2,Float64},
+#   xMid::Vector,
+#   yMid::Vector,
+#   xDomain::Vector, 
+#   yDomain::Vector,
+#   σ::ComplexF64,
+#   rijMid::Matrix,
+#   arcLengths::Vector,
+#   numSegments::Int,
+#   dindex::StepRange,
+#   )
 
-@warn "This method is deprecated in favour of newer ones that allow band integrated matrices."
+# @warn "This method is deprecated in favour of newer ones that allow band integrated matrices."
 
-# calculates boundary wall method
-waveNumber = norm(waveVector)
-waveAtBoundary = incidentWave.(Ref(waveVector), xMid, yMid);
-waveAtDomain   = incidentWave.(Ref(waveVector), xDomain, yDomain)
+# # calculates boundary wall method
+# waveNumber = norm(waveVector)
+# waveAtBoundary = incidentWave.(Ref(waveVector), xMid, yMid);
+# waveAtDomain   = incidentWave.(Ref(waveVector), xDomain, yDomain)
 
-# calculate M matrix
-# Mij          = @. σ * calcGreenFun(waveNumber, rijMid) * arcLengths[1]#  arcLengths # multiplies cols by ds[j]
+# # calculate M matrix
+# # Mij          = @. σ * calcGreenFun(waveNumber, rijMid) * arcLengths[1]#  arcLengths # multiplies cols by ds[j]
+# # Mij[dindex] .= @. σ * calcGreenFun(waveNumber, arcLengths/2) * arcLengths[1] # arcLengths;
+
+# Mij = calcMmatrix(waveNumber, σ, rijMid, arcLengths, dindex)
+
+# # T          = potentialFunction .* inv(I(numSegments) .- potentialFunction .* Mij);
+# # TPHI = T * waveAtBoundary;
+# # TPHI         = -(Mij \ waveAtBoundary)
+# # TPHI = -IterativeSolvers.gmres(Mij, waveAtBoundary)
+
+# # TPHI = -solve(LinearProblem(Mij, waveAtBoundary),IterativeSolversJL_GMRES)
+# TPHI = -solve(LinearProblem(Mij, waveAtBoundary),KrylovJL_GMRES())
+
+# # potentialContribution = mapreduce( (j) -> σ * calcGreenFun.(waveNumber, hypot.(xDomain.-view(xMid,j)[1], yDomain.-view(yMid,j)[1])) * view(arcLengths,j)[1] * view(TPHI,j)[1] , +, 1:numSegments)
+# # wave =  waveAtDomain + ThreadsX.mapreduce((j) -> σ * calcGreenFun.(waveNumber, hypot.(xDomain.-view(xMid,j)[1], yDomain.-view(yMid,j)[1])) * view(arcLengths,j)[1] * view(TPHI,j)[1],+, 1:numSegments)
+# wave = waveAtDomain
+# @inbounds for j in 1:numSegments
+#   RR = @.  hypot(xDomain  - (@view xMid[j]), yDomain - (@view yMid[j]))
+#   wave += @. σ * calcGreenFun(waveNumber,RR) * (@view arcLengths[j]) * (@view TPHI[j])
+# end
+
+# # wave =  + potentialContribution; # Huygens-like principle
+# # return -inv(Mij)
+# # T = -inv(Mij)
+# # return T[id]
+# return wave
+# end
+
+# """
+#   `boundaryWallWave(..., potentialFunction::Float64)`
+
+# Computes scattered field by a wall at domain points with a functional potential strength.
+# """
+# function boundaryWallWave(
+#   waveVector::SVector{2,Float64},
+#   xMid::Vector,
+#   yMid::Vector,
+#   xDomain::Vector, 
+#   yDomain::Vector,
+#   σ::ComplexF64,
+#   rijMid::Matrix,
+#   arcLengths::Vector,
+#   numSegments::Int,
+#   dindex::StepRange,
+#   potentialFunction::Vector,
+#   )
+
+# @warn "This method is deprecated in favour of newer ones that allow band integrated matrices."
+# # calculates boundary wall method
+# waveNumber = norm(waveVector)
+# waveAtBoundary = incidentWave.(Ref(waveVector), xMid, yMid);
+# waveAtDomain   = incidentWave.(Ref(waveVector), xDomain, yDomain)
+
+# # calculate M matrix
+# Mij          = @. σ * calcGreenFun(waveNumber, rijMid) * arcLengths[1] # arcLengths # multiplies cols by ds[j]
+# Mij[dindex] .= @. σ * calcGreenFun(waveNumber, arcLengths/2) * arcLengths[1]# arcLengths;
+
+# TPHI         = inv(LinearAlgebra.I(numSegments) .- potentialFunction .* Mij)
+# TPHI         = potentialFunction .* TPHI * waveAtBoundary
+# # TPHI         = T * waveAtBoundary;
+# # TPHI         = -(Mij \ waveAtBoundary)
+
+# # potentialContribution = mapreduce( (j) -> σ * calcGreenFun.(waveNumber, hypot.(xDomain.-view(xMid,j)[1], yDomain.-view(yMid,j)[1])) * view(arcLengths,j)[1] * view(TPHI,j)[1] , +, 1:numSegments)
+# # potentialContribution = ThreadsX.mapreduce((j) -> σ * calcGreenFun.(waveNumber, hypot.(xDomain.-view(xMid,j)[1], yDomain.-view(yMid,j)[1])) * view(arcLengths,j)[1] * view(TPHI,j)[1],+, 1:numSegments)
+# potentialContribution = zeros(ComplexF64, length(xDomain));
+# @inbounds for j in 1:numSegments
+#   potentialContribution += @. σ * calcGreenFun(waveNumber, hypot(xDomain  - (@view xMid[j]), yDomain - (@view yMid[j]))) * (@view arcLengths[j]) * (@view TPHI[j])
+# end
+
+# wave = waveAtDomain + potentialContribution; # Huygens-like principle
+# # return -inv(Mij)
+# # T = -inv(Mij)
+# # return T[id]
+# return wave
+# end
+
+# """
+#   `boundaryWallWave(..., potentialFunction::Float64)`
+
+# Computes scattered field by a wall at domain points with a scalar potential strength.
+# """
+# function boundaryWallWave(
+#   waveVector::SVector{2,Float64},
+#   xMid::Vector,
+#   yMid::Vector,
+#   xDomain::Vector, 
+#   yDomain::Vector,
+#   σ::ComplexF64,
+#   rijMid::Matrix,
+#   arcLengths::Vector,
+#   numSegments::Int,
+#   dindex::StepRange,
+#   potentialStrength::Union{ComplexF64,Float64},
+#   )
+
+# @warn "This method is deprecated in favour of newer ones that allow band integrated matrices."
+
+# # calculates boundary wall method
+# waveNumber     = norm(waveVector)
+# waveAtBoundary = incidentWave.(Ref(waveVector), xMid, yMid);
+# waveAtDomain   = incidentWave.(Ref(waveVector), xDomain, yDomain)
+
+# # calculate M matrix
+# Mij          = @. σ * calcGreenFun(waveNumber, rijMid) * arcLengths[1] # arcLengths # multiplies cols by ds[j]
 # Mij[dindex] .= @. σ * calcGreenFun(waveNumber, arcLengths/2) * arcLengths[1] # arcLengths;
 
-Mij = calcMmatrix(waveNumber, σ, rijMid, arcLengths, dindex)
+# # TPHI         = IterativeSolvers.gmres(A, waveAtBoundary)
+# TPHI         = potentialStrength *  solve(LinearProblem(LinearAlgebra.I(numSegments) .- potentialStrength * Mij, waveAtBoundary))
 
-# T          = potentialFunction .* inv(I(numSegments) .- potentialFunction .* Mij);
-# TPHI = T * waveAtBoundary;
-# TPHI         = -(Mij \ waveAtBoundary)
-# TPHI = -IterativeSolvers.gmres(Mij, waveAtBoundary)
+# # TPHI          = potentialStrength * inv(LinearAlgebra.I(numSegments) .- potentialStrength * Mij)  * waveAtBoundary ;
 
-# TPHI = -solve(LinearProblem(Mij, waveAtBoundary),IterativeSolversJL_GMRES)
-TPHI = -solve(LinearProblem(Mij, waveAtBoundary),KrylovJL_GMRES())
+# potentialContribution = zeros(ComplexF64, length(xDomain));
+# @inbounds for j in 1:numSegments
+#   # @inbounds potentialContribution += @. σ * calcGreenFun(waveNumber, hypot(xDomain  - (@view xMid[j]), yDomain - (@view yMid[j]))) * (@view arcLengths[j]) * (@view TPHI[j])
+#   Gzz = [calcGreenFun(waveNumber, hypot(x  .- (@view xMid[j]), y .- (@view yMid[j]))) for (x,y) in zip(xDomain, yDomain)]
+#   potentialContribution += σ * (Gzz .* arcLengths[j] .* TPHI[j])
+# end
 
-# potentialContribution = mapreduce( (j) -> σ * calcGreenFun.(waveNumber, hypot.(xDomain.-view(xMid,j)[1], yDomain.-view(yMid,j)[1])) * view(arcLengths,j)[1] * view(TPHI,j)[1] , +, 1:numSegments)
-# wave =  waveAtDomain + ThreadsX.mapreduce((j) -> σ * calcGreenFun.(waveNumber, hypot.(xDomain.-view(xMid,j)[1], yDomain.-view(yMid,j)[1])) * view(arcLengths,j)[1] * view(TPHI,j)[1],+, 1:numSegments)
-wave = waveAtDomain
-@inbounds for j in 1:numSegments
-  RR = @.  hypot(xDomain  - (@view xMid[j]), yDomain - (@view yMid[j]))
-  wave += @. σ * calcGreenFun(waveNumber,RR) * (@view arcLengths[j]) * (@view TPHI[j])
-end
-
-# wave =  + potentialContribution; # Huygens-like principle
-# return -inv(Mij)
-# T = -inv(Mij)
-# return T[id]
-return wave
-end
-
-"""
-  `boundaryWallWave(..., potentialFunction::Float64)`
-
-Computes scattered field by a wall at domain points with a functional potential strength.
-"""
-function boundaryWallWave(
-  waveVector::SVector{2,Float64},
-  xMid::Vector,
-  yMid::Vector,
-  xDomain::Vector, 
-  yDomain::Vector,
-  σ::ComplexF64,
-  rijMid::Matrix,
-  arcLengths::Vector,
-  numSegments::Int,
-  dindex::StepRange,
-  potentialFunction::Vector,
-  )
-
-@warn "This method is deprecated in favour of newer ones that allow band integrated matrices."
-# calculates boundary wall method
-waveNumber = norm(waveVector)
-waveAtBoundary = incidentWave.(Ref(waveVector), xMid, yMid);
-waveAtDomain   = incidentWave.(Ref(waveVector), xDomain, yDomain)
-
-# calculate M matrix
-Mij          = @. σ * calcGreenFun(waveNumber, rijMid) * arcLengths[1] # arcLengths # multiplies cols by ds[j]
-Mij[dindex] .= @. σ * calcGreenFun(waveNumber, arcLengths/2) * arcLengths[1]# arcLengths;
-
-TPHI         = inv(LinearAlgebra.I(numSegments) .- potentialFunction .* Mij)
-TPHI         = potentialFunction .* TPHI * waveAtBoundary
-# TPHI         = T * waveAtBoundary;
-# TPHI         = -(Mij \ waveAtBoundary)
-
-# potentialContribution = mapreduce( (j) -> σ * calcGreenFun.(waveNumber, hypot.(xDomain.-view(xMid,j)[1], yDomain.-view(yMid,j)[1])) * view(arcLengths,j)[1] * view(TPHI,j)[1] , +, 1:numSegments)
-# potentialContribution = ThreadsX.mapreduce((j) -> σ * calcGreenFun.(waveNumber, hypot.(xDomain.-view(xMid,j)[1], yDomain.-view(yMid,j)[1])) * view(arcLengths,j)[1] * view(TPHI,j)[1],+, 1:numSegments)
-potentialContribution = zeros(ComplexF64, length(xDomain));
-@inbounds for j in 1:numSegments
-  potentialContribution += @. σ * calcGreenFun(waveNumber, hypot(xDomain  - (@view xMid[j]), yDomain - (@view yMid[j]))) * (@view arcLengths[j]) * (@view TPHI[j])
-end
-
-wave = waveAtDomain + potentialContribution; # Huygens-like principle
-# return -inv(Mij)
-# T = -inv(Mij)
-# return T[id]
-return wave
-end
-
-"""
-  `boundaryWallWave(..., potentialFunction::Float64)`
-
-Computes scattered field by a wall at domain points with a scalar potential strength.
-"""
-function boundaryWallWave(
-  waveVector::SVector{2,Float64},
-  xMid::Vector,
-  yMid::Vector,
-  xDomain::Vector, 
-  yDomain::Vector,
-  σ::ComplexF64,
-  rijMid::Matrix,
-  arcLengths::Vector,
-  numSegments::Int,
-  dindex::StepRange,
-  potentialStrength::Union{ComplexF64,Float64},
-  )
-
-@warn "This method is deprecated in favour of newer ones that allow band integrated matrices."
-
-# calculates boundary wall method
-waveNumber     = norm(waveVector)
-waveAtBoundary = incidentWave.(Ref(waveVector), xMid, yMid);
-waveAtDomain   = incidentWave.(Ref(waveVector), xDomain, yDomain)
-
-# calculate M matrix
-Mij          = @. σ * calcGreenFun(waveNumber, rijMid) * arcLengths[1] # arcLengths # multiplies cols by ds[j]
-Mij[dindex] .= @. σ * calcGreenFun(waveNumber, arcLengths/2) * arcLengths[1] # arcLengths;
-
-# TPHI         = IterativeSolvers.gmres(A, waveAtBoundary)
-TPHI         = potentialStrength *  solve(LinearProblem(LinearAlgebra.I(numSegments) .- potentialStrength * Mij, waveAtBoundary))
-
-# TPHI          = potentialStrength * inv(LinearAlgebra.I(numSegments) .- potentialStrength * Mij)  * waveAtBoundary ;
-
-potentialContribution = zeros(ComplexF64, length(xDomain));
-@inbounds for j in 1:numSegments
-  # @inbounds potentialContribution += @. σ * calcGreenFun(waveNumber, hypot(xDomain  - (@view xMid[j]), yDomain - (@view yMid[j]))) * (@view arcLengths[j]) * (@view TPHI[j])
-  Gzz = [calcGreenFun(waveNumber, hypot(x  .- (@view xMid[j]), y .- (@view yMid[j]))) for (x,y) in zip(xDomain, yDomain)]
-  potentialContribution += σ * (Gzz .* arcLengths[j] .* TPHI[j])
-end
-
-wave = waveAtDomain + potentialContribution; # Huygens-like principle
-return wave
-end
+# wave = waveAtDomain + potentialContribution; # Huygens-like principle
+# return wave
+# end
 
 
 
@@ -552,6 +587,18 @@ function r(r0::SVector{2, Float64},r1::SVector{2, Float64}, t::Float64)
 
   return r0 + t * (r1 - r0) 
 end
+
+"""
+  `r(r0, r1, t)`
+
+Equation of a line parametrized in t ∈ (0,1), for 3d line
+"""
+function r(r0::SVector{3, Float64},r1::SVector{3, Float64}, t::Float64)
+  @assert ((t <= 1.0) &&  (t >= 0.0)) "`t` must be within (0,1)"
+
+  return r0 + t * (r1 - r0) 
+end
+
 
 
 """
@@ -713,99 +760,127 @@ incidence to the system.
 Returns the dyads we need for its construction.
 
 # Arguments: 
-- `waveNumber`: wave number
-- `θ`: angle of wave incidence (radians)
+- `waveVector`: wave vector (3D)
+- `σ::ComplexF64`: green function constant
 - `rijMid`: distance matrix
 - `arcLengths`: segment length vector (should be homogeneous)
 - `band`: band to use for banded matrix
 """
-function calcGreenTensor(waveNumber::Float64,
-                         θ::Float64,
+function calcGreenTensor(waveVector::SVector{3,Float64},
                          σ::ComplexF64,
                          rijMid::Matrix,
                          arcLengths::Vector,
                          band::Int64,
-                         _rm::Vector{SVector{2, Float64}},
-                         _r::CircularVector{SVector{2, Float64},Vector{SVector{2, Float64}}},
-                         numSegments::Int64,)
-  Gxx          = σ * calcGreenFun.(:xx, θ, waveNumber, rijMid) * arcLengths[1] #arcLengths
-  Gxy          = σ * calcGreenFun.(:xy, θ, waveNumber, rijMid) * arcLengths[1] #arcLengths
-  Gyy          = σ * calcGreenFun.(:yy, θ, waveNumber, rijMid) * arcLengths[1] #arcLengths
-  Gzz          = σ * calcGreenFun.(:zz, θ, waveNumber, rijMid) * arcLengths[1] #arcLengths
-  # Gzz          = @. im / 4 * BoundaryWall.calcGreenFun(waveNumber, rijMid) * arcLengths
+                         _rm::Union{Vector{SVector{2, Float64}},Vector{SVector{3, Float64}}},
+                         _r::Union{CircularVector{SVector{2, Float64},Vector{SVector{2, Float64}}},CircularVector{SVector{3, Float64},Vector{SVector{3, Float64}}}},
+                         numSegments::Int64)
+
+  @assert numSegments == size(rijMid, 1)
+  println("Using full 3D tensor")
+
+  waveNumber   = norm(waveVector)
+  θ            = atand(waveVector[2], waveVector[1]) # cartesian vector azimuth (degrees)
+
+  Gxx          = σ * calcGreenFun.(:xx, θ, Ref(waveVector), rijMid) * arcLengths[1] #arcLengths
+  Gxy          = σ * calcGreenFun.(:xy, θ, Ref(waveVector), rijMid) * arcLengths[1] #arcLengths
+  Gxz          = σ * calcGreenFun.(:xz, θ, Ref(waveVector), rijMid) * arcLengths[1] #arcLengths
+  Gyy          = σ * calcGreenFun.(:yy, θ, Ref(waveVector), rijMid) * arcLengths[1] #arcLengths
+  Gyz          = σ * calcGreenFun.(:yz, θ, Ref(waveVector), rijMid) * arcLengths[1] #arcLengths
+  Gzz          = σ * calcGreenFun.(:zz, θ, Ref(waveVector), rijMid) * arcLengths[1] #arcLengths
   
   # band elements
   # use _j to index positions
-  [Gxx[i,j] = calcMmatrix(:xx, θ, waveNumber, σ, _rm[i], _r[_j], _r[_j+1]) for i in axes(Gxx,1), (j,_j) in zip(axes(Gxx, 2), segmentIterator(_r, numSegments)) if (abs(i - j) < band  &&  i != j)]
-  [Gxy[i,j] = calcMmatrix(:xy, θ, waveNumber, σ, _rm[i], _r[_j], _r[_j+1]) for i in axes(Gxy,1), (j,_j) in zip(axes(Gxy, 2), segmentIterator(_r, numSegments)) if (abs(i - j) < band  &&  i != j)]
-  [Gyy[i,j] = calcMmatrix(:yy, θ, waveNumber, σ, _rm[i], _r[_j], _r[_j+1]) for i in axes(Gyy,1), (j,_j) in zip(axes(Gyy, 2), segmentIterator(_r, numSegments)) if (abs(i - j) < band  &&  i != j)]
-
-  # [Gxx[i,j] = calcMmatrix(:xx, θ, waveNumber, σ, _rm[i], _r[_j], _r[_j+1]) for i in axes(Gxx,1), (j,_j) in zip(axes(Gxx, 2), segmentIterator(_r, numSegments)) if (abs(i - j) < band)]
-  # [Gxy[i,j] = calcMmatrix(:xy, θ, waveNumber, σ, _rm[i], _r[_j], _r[_j+1]) for i in axes(Gxy,1), (j,_j) in zip(axes(Gxy, 2), segmentIterator(_r, numSegments)) if (abs(i - j) < band)]
-  # [Gyy[i,j] = calcMmatrix(:yy, θ, waveNumber, σ, _rm[i], _r[_j], _r[_j+1]) for i in axes(Gyy,1), (j,_j) in zip(axes(Gyy, 2), segmentIterator(_r, numSegments)) if (abs(i - j) < band)]
+  for (_tensor, _type) in zip([Gxx, Gxy, Gxz, Gyy, Gyz, Gzz], [:xx,:xy,:xz, :yy, :yz, :zz])
+  print("Calculating G_$_type...")
+  # @threads for i in axes(_tensor,1)
+  for i in axes(_tensor,1)
+    for (j,_j) in zip(axes(_tensor, 2), segmentIterator(_r, numSegments))       
+      if abs(i - j) < band
+        _tensor[i,j] = σ * first(hquadrature(t -> calcGreenFun(_type, θ, waveVector, norm(_rm[i] - r(_r[_j], _r[_j+1], t))), 0.0, 1.0, maxevals = 10_000, rtol=1e-5)) * norm(_r[_j] - _r[_j+1])
+      end
+    end
+  end
+  print("... Done!\n")
+  end
   
-  # diagonal elements
-  # [Gxx[i,i] = σ * first(quadgk(t -> calcGreenFun(:xx, θ, waveNumber, norm(_rm[i] - r(_r[i], _r[i+1], t))), 0.0,  0.5, 1.0, rtol=1e-3)) * norm(_r[i+1] - _r[i]) for i in axes(Gxx,2)] # scaling
-  [Gxx[j,j] = σ * (
-                   first(quadgk(t -> calcGreenFun(:xx, θ, waveNumber, norm(_rm[j] - r(_r[_j], _r[_j+1], t))), 0.0,  0.499)) + 
-                   first(quadgk(t -> calcGreenFun(:xx, θ, waveNumber,norm(_rm[j] - r(_r[_j], _r[_j+1], t))), 0.501,  1.0))
-                  ) * norm(_r[_j+1] - _r[_j]) for (j,_j) in zip(axes(Gxx, 2), segmentIterator(_r, numSegments))]
-  
-  [Gxy[j,j] = σ * (
-                    first(quadgk(t -> calcGreenFun(:xy, θ, waveNumber, norm(_rm[j] - r(_r[_j], _r[_j+1], t))), 0.0,  0.499)) + 
-                    first(quadgk(t -> calcGreenFun(:xy, θ, waveNumber, norm(_rm[j] - r(_r[_j], _r[_j+1], t))), 0.501,  1.0))
-                   ) * norm(_r[_j+1] - _r[_j]) for (j,_j) in zip(axes(Gxx, 2), segmentIterator(_r, numSegments))]
-  
-  [Gyy[j,j] = σ * (
-                    first(quadgk(t -> calcGreenFun(:yy, θ, waveNumber, norm(_rm[j] - r(_r[_j], _r[_j+1], t))), 0.0,  0.499)) + 
-                    first(quadgk(t -> calcGreenFun(:yy, θ, waveNumber, norm(_rm[j] - r(_r[_j], _r[_j+1], t))), 0.501,  1.0))
-                   ) * norm(_r[_j+1] - _r[_j]) for (j,_j) in zip(axes(Gxx, 2), segmentIterator(_r, numSegments))]
-
-  # dindex = diagind(size(rijMid)...)
-  # [Gxx[i,i] = calcGreenFun(:xx, θ, waveNumber, arcLengths[i]/2) * arcLengths[i] for i in eachindex(arcLengths)]
-  # [Gxy[i,i] = calcGreenFun(:xy, θ, waveNumber, arcLengths[i]/2) * arcLengths[i] for i in eachindex(arcLengths)]
-  # [Gyy[i,i] = calcGreenFun(:yy, θ, waveNumber, arcLengths[i]/2) * arcLengths[i] for i in eachindex(arcLengths)]
-  # [Gyy[i,j] = calcMmatrix(:yy, θ, waveNumber, σ, _rm[i], _r[_j], _r[_j+1]) for i in axes(Gyy,1), (j,_j) in zip(axes(Gyy, 2), segmentIterator(_r, numSegments)) if abs(i - j) < band]
-  
-  [Gzz[i,j] = calcMmatrix(:zz, θ, waveNumber, σ, _rm[i], _r[_j], _r[_j+1]) for i in axes(Gzz,1), (j,_j) in zip(axes(Gzz, 2), segmentIterator(_r, numSegments)) if abs(i - j) < band]
-  
-  # return [ones(size(Gxx))-view(Gxx,:,:) view(Gxy,:,:);view(Gxy,:,:) ones(size(Gxx))-view(Gyy,:,:)]
-  return Gxx, Gxy, Gyy, Gzz
-  # return Gxx, Gxy, Gyy, Gzz
+  # return [I(numSegments) - γ*Gxx Gxy Gxz; 
+  #         Gxy I(numSegments) - γ*Gyy Gyz; 
+  #         Gxz Gyz I(numSegments) - γ*Gzz]
+  return Gxx, Gxy, Gxz, Gyy, Gyz, Gzz
 end
 
 
 """
   `calcGreenFun(type::Symbol, θ::Float64, k::Float64, r::Float64)`
 
-Calculates Green's dyads for any incidence angle.
+Calculates Green's dyads for any incidence angle (in a **2D** system).
 
 # Arguments:
 - `type`: A symbol, either :xx, :xy, :yy, or :zz. It denotes the dyadic of Green's 
         tensor to calculate.
-- `θ`:    Incident angle.
-- `kB`:   3d wave number.
-- `kRho`: 
+- `θ`:    Incident angle in **degrees**
+- `kB`:   3d wave number, kB[1:2] = k_ρ
 - `r`:    Distance |r - r'|
 """
-function calcGreenFun(type::Symbol, θ::Float64, kB::Float64, kRho::Float64, r::Float64)
+function calcGreenFun(type::Symbol, θ::Float64, kB::SVector{3,Float64}, r::Float64)
   # make this broadcasted 
   # this is still faster than the multiple dispatch (using a struct)
+  # make sure 
+  kRho = kB[1:2]
+  k = norm(kRho) # k rho
+  # kB 
   if type == :xx
-    return sin(θ)^2 * hankelh1(0, k*r) + im/4 * cos(2θ)/(k*r)*hankelh1(1, k*r)
+    return 0.25im*((1-(sum(kRho.^2)*cosd(θ)^2/norm(kB)^2))*hankelh1(0.0, norm(kB)*r)+k*cosd(2θ)*hankelh1(1.0, k*r)/(sum(kB.^2)*r))
   elseif type==:xy
-    return sin(2θ)/2 * hankelh1(2, k*r)
+    return sin(2θ) * 0.25 * sum(kRho.^2)*sind(2θ)*hankelh1(2.0, k*r)/(2*sum(kB.^2))
+  elseif type==:xz
+    return 0.25*k*kB[3]*cosd(θ)*hankelh1(1.0, k*r)/sum(kB.^2)
   elseif type==:yy
-    return (cos(θ)^2 * hankelh1(0, k*r) - im/4 * cos(2θ)/(k*r)*hankelh1(1, k*r))
-  elseif type==:xy
-    return ()
+    return 0.25im*((1-(sum(kRho.^2)*sind(θ)^2/norm(kB)^2))*hankelh1(0.0, norm(kB)*r) - k*cosd(2θ)*hankelh1(1.0, k*r)/(sum(kB.^2)*r))
+  elseif type==:yz
+    return 0.25*k*kB[3]*sind(θ)*hankelh1(1.0, k*r)/sum(kB.^2)
   elseif type==:zz
-    return hankelh1(0, k*r)
+    return 0.25im*(1-kB[3]^2/sum(kB.^2))*hankelh1(0.0, k*r)
   end
 end
 
 
 """
+  `calcGreenFun(type::Symbol, θ::Float64, k::Float64, r::Float64)`
+
+Calculates Green's dyads for any incidence angle (in a **3D** system).
+
+# Arguments:
+- `type`: A symbol, either :xx, :xy, :yy, or :zz. It denotes the dyadic of Green's 
+        tensor to calculate.
+- `θ`:    Incident angle in **degrees**
+- `kB`:   3d wave number, kB[1:2] = k_ρ
+- `r`:    Distance |r - r'|
+"""
+function calcGreenFun(type::Symbol, θ::Float64, kB::SVector{3,Float64}, r::Float64)
+  # make this broadcasted 
+  # this is still faster than the multiple dispatch (using a struct)
+  # make sure 
+  kRho = kB[1:2]
+  k = norm(kRho) # k rho
+  # kB 
+  if type == :xx
+    return 0.25im*((1-(sum(kRho.^2)*cosd(θ)^2/norm(kB)^2))*hankelh1(0.0, norm(kB)*r)+k*cosd(2θ)*hankelh1(1.0, k*r)/(sum(kB.^2)*r))
+  elseif type==:xy
+    return sin(2θ) * 0.25 * sum(kRho.^2)*sind(2θ)*hankelh1(2.0, k*r)/(2*sum(kB.^2))
+  elseif type==:xz
+    return 0.25*k*kB[3]*cosd(θ)*hankelh1(1.0, k*r)/sum(kB.^2)
+  elseif type==:yy
+    return 0.25im*((1-(sum(kRho.^2)*sind(θ)^2/norm(kB)^2))*hankelh1(0.0, norm(kB)*r) - k*cosd(2θ)*hankelh1(1.0, k*r)/(sum(kB.^2)*r))
+  elseif type==:yz
+    return 0.25*k*kB[3]*sind(θ)*hankelh1(1.0, k*r)/sum(kB.^2)
+  elseif type==:zz
+    return 0.25im*(1-kB[3]^2/sum(kB.^2))*hankelh1(0.0, k*r)
+  end
+end
+
+
+  """
   `boundaryWallWave(waveVector,xMid, yMid, xDomain, yDomain, σ, rijMid, arcLengths, numSegments, dindex)`
 
 Computes the scattered, vectorial field by a wall (aka the Boundary Wall Method),
@@ -842,62 +917,295 @@ function boundaryWallVec(
   incidentWave::SVector{3, Function}
   )
 
+banded = 2
 # calculates boundary wall method
 waveNumber      = norm(waveVector)
-waveAngle       = atan(waveVector...)
+waveAngle       = atan(waveVector[2], waveVector[1])
 
 waveAtBoundaryX = [incidentWave[1](waveVector,x,y) for (x,y) in zip(xMid,yMid)];
 waveAtBoundaryY = [incidentWave[2](waveVector,x,y) for (x,y) in zip(xMid,yMid)];
 waveAtBoundaryZ = [incidentWave[3](waveVector,x,y) for (x,y) in zip(xMid,yMid)];
 
-waveAtDomainX   = [incidentWave[1](waveVector,x,y) for (x,y) in zip(xDomain, yDomain)];
-waveAtDomainY   = [incidentWave[2](waveVector,x,y) for (x,y) in zip(xDomain, yDomain)];
-waveAtDomainZ   = [incidentWave[3](waveVector,x,y) for (x,y) in zip(xDomain, yDomain)];
+# waveAtDomainX   = [incidentWave[1](waveVector,x,y) for (x,y) in zip(xDomain, yDomain)];
+# waveAtDomainY   = [incidentWave[2](waveVector,x,y) for (x,y) in zip(xDomain, yDomain)];
+# waveAtDomainZ   = [incidentWave[3](waveVector,x,y) for (x,y) in zip(xDomain, yDomain)];
+
+_wave_X = [incidentWave[1](waveVector,x,y) for (x,y) in zip(xDomain, yDomain)];
+_wave_Y = [incidentWave[2](waveVector,x,y) for (x,y) in zip(xDomain, yDomain)];
+_wave_Z = [incidentWave[3](waveVector,x,y) for (x,y) in zip(xDomain, yDomain)];
 
 rMid = SVector.(xMid, yMid)
 rPos = CircularArray(SVector.(xBoundary, yBoundary)[1:end])
+rDom = SVector.(xDomain, yDomain)
 # calculate M matrix
 
-Mxx,Mxy,Myy,Mzz = calcGreenTensor(waveNumber, waveAngle, σ, rijMid, arcLengths, 10, rMid, rPos, numSegmentsMod)
-println("new method")
+Mxx,Mxy,Myy,Mzz = calcGreenTensor(waveNumber, waveAngle, σ, rijMid, arcLengths, banded, rMid, rPos, numSegmentsMod)
+# println("new method")
 dindex = diagind(size(rijMid)...)
 # Mxx,Mxy,Myy,Mzz = σ .* calcGreenTensor(waveNumber, waveAngle, rijMid, arcLengths, dindex)
 
-greensTensor = [Mxx Mxy; Mxy Myy] # ./ arcLengths[1] # normalization stuff
+greensTensor = [Mxx Mxy zero(Mzz); Mxy Myy zero(Mzz); zero(Mxx) zero(Myy) Mzz] # ./ arcLengths[1] # normalization stuff
 
-TPHI_TE = - greensTensor \ [waveAtBoundaryX; waveAtBoundaryY]
+TPHI = - greensTensor \ [waveAtBoundaryX; waveAtBoundaryY; waveAtBoundaryZ]
 
-TPHI_X = TPHI_TE[1:numSegments]
-TPHI_Y = TPHI_TE[numSegments+1:end]
+TPHI_X = TPHI[1:numSegments]
+TPHI_Y = TPHI[numSegments+1:2numSegments]
+TPHI_Z = TPHI[2numSegments+1:3numSegments]
 
-TPHI_TM = -Mzz \ waveAtBoundaryZ
+# TPHI_TM = -Mzz \ waveAtBoundaryZ
 
 # potentialContribution = mapreduce( (j) -> σ * calcGreenFun.(waveNumber, hypot.(xDomain.-view(xMid,j)[1], yDomain.-view(yMid,j)[1])) * view(arcLengths,j)[1] * view(TPHI,j)[1] , +, 1:numSegments)
 # wave =  waveAtDomain + ThreadsX.mapreduce((j) -> σ * calcGreenFun.(waveNumber, hypot.(xDomain.-view(xMid,j)[1], yDomain.-view(yMid,j)[1])) * view(arcLengths,j)[1] * view(TPHI,j)[1],+, 1:numSegments)
-waveX = waveAtDomainX
-waveY = waveAtDomainY
-waveZ = waveAtDomainZ
+
 
 # RR = zeros()
 # Gxy = zeros(length(xDomain)) or add local to Gxy
-@inbounds for j in 1:numSegments
-  RR = [hypot(x  .- (@view xMid[j]), y .- (@view yMid[j])) for (x,y) in zip(xDomain, yDomain)]
+# @inbounds for j in 1:numSegments
+#   RR = [hypot(x  .- (@view xMid[j]), y .- (@view yMid[j])) for (x,y) in zip(xDomain, yDomain)]
 
-  Gxy = calcGreenFun.(:xy, waveAngle, waveNumber, RR)
+#   Gxy = calcGreenFun.(:xy, waveAngle, waveNumber, RR)
 
   
-  waveX += @inbounds @. σ * (calcGreenFun(:xx, waveAngle, waveNumber, RR) * (@view TPHI_X[j]) + Gxy  * (@view TPHI_Y[j])) * (@view arcLengths[j]) 
-  waveY += @inbounds @. σ * (Gxy * (@view TPHI_X[j]) + calcGreenFun(:yy, waveAngle, waveNumber, RR)  * (@view TPHI_Y[j])) * (@view arcLengths[j]) 
-  waveZ += @inbounds @. σ *  calcGreenFun(:zz, waveAngle, waveNumber, RR) * (@view arcLengths[j]) * (@view TPHI_TM[j])
+#   # _wave_X += @inbounds @. σ * (calcGreenFun(:xx, waveAngle, waveNumber, RR) * (@view TPHI_X[j]) + Gxy  * (@view TPHI_Y[j])) * (@view arcLengths[j]) 
+#   # _wave_Y += @inbounds @. σ * (Gxy * (@view TPHI_X[j]) + calcGreenFun(:yy, waveAngle, waveNumber, RR)  * (@view TPHI_Y[j])) * (@view arcLengths[j]) 
+
+#   _wave_Z += @inbounds @. σ *  calcGreenFun(:zz, waveAngle, waveNumber, RR) * (@view arcLengths[j]) * (@view TPHI_TM[j])
+# end
+
+@inbounds for j in 1:numSegments-1
+  #   # RR = @.  hypot(xDomain  - (@view xMid[j]), yDomain - (@view yMid[j]))
+#   # wave += @. σ * calcGreenFun(waveNumber,RR) * (@view arcLengths[j]) * (@view TPHI[j])
+  @inbounds for (i,_r) in enumerate(rDom)
+    if waveNumber*norm(rMid[j] - _r) < 0.1
+      # _wave_X[i] += σ * first(calcGreenFun(:xx, waveAngle, waveNumber, RR) * (@view TPHI_X[j]) + Gxy  * (@view TPHI_Y[j])) * (@view arcLengths[j]) 
+      # wave[i] += σ * calcGreenFun(waveNumber,norm(rMid[j] - _r)) * (arcLengths[j]) * (TPHI[j])
+      _wave_Z[i] += σ * first(hquadrature(t->calcGreenFun(:zz, waveAngle, waveNumber, norm(_r-r(rPos[j], rPos[j+1], t))), 0.0, 1.0)) *TPHI_Z[j] * norm(rPos[j] - rPos[j+1])
+      _wave_X[i] += σ * (first(hquadrature(t->calcGreenFun(:xx, waveAngle, waveNumber, norm(_r-r(rPos[j], rPos[j+1], t))), 0.0, 1.0))*TPHI_X[j] +
+                       first(hquadrature(t->calcGreenFun(:xy, waveAngle, waveNumber, norm(_r-r(rPos[j], rPos[j+1], t))), 0.0, 1.0))*TPHI_Y[j]) * norm(rPos[j] - rPos[j+1])
+      _wave_Y[i] += σ * (first(hquadrature(t->calcGreenFun(:xy, waveAngle, waveNumber, norm(_r-r(rPos[j], rPos[j+1], t))), 0.0, 1.0))*TPHI_X[j] +
+                       first(hquadrature(t->calcGreenFun(:yy, waveAngle, waveNumber, norm(_r-r(rPos[j], rPos[j+1], t))), 0.0, 1.0))*TPHI_Y[j]) * norm(rPos[j] - rPos[j+1])
+    else
+      _wave_Z[i] += σ * calcGreenFun(:zz, waveAngle, waveNumber,norm(rMid[j]-_r)) *TPHI_Z[j] * arcLengths[j]
+      _wave_X[i] += σ * (calcGreenFun(:xx, waveAngle, waveNumber,norm(rMid[j]-_r))*TPHI_X[j]+calcGreenFun(:xy, waveAngle, waveNumber,norm(rMid[j]-_r))*TPHI_Y[j]) *  norm(rPos[j] - rPos[j+1])
+      _wave_Y[i] += σ * (calcGreenFun(:xy, waveAngle, waveNumber,norm(rMid[j]-_r))*TPHI_X[j]+calcGreenFun(:yy, waveAngle, waveNumber,norm(rMid[j]-_r))*TPHI_Y[j]) *  norm(rPos[j] - rPos[j+1])
+    end
+  end
 end
 
 # wave =  + potentialContribution; # Huygens-like principle
 # return -inv(Mij)
 # T = -inv(Mij)
 # return T[id]
-return waveX, waveY, waveZ
+return _wave_X, _wave_Y, _wave_Z
 end
 
+"""
+  `boundaryWallWave(waveVector::SVector{3,Float64},...)`
+
+Computes the vectorial scattering for 3D incidence on 2D plane
+
+# Arguments:
+- `waveVector::SVector{3,Float64}`: self explanatory
+"""
+function boundaryWallVec(
+  waveVector::SVector{3,Float64},
+  xMid::Vector{Float64},
+  yMid::Vector{Float64},
+  xBoundary::Vector{Float64},
+  yBoundary::Vector{Float64},
+  xDomain::Vector{Float64}, 
+  yDomain::Vector{Float64},
+  zDomain::Float64,
+  σ::ComplexF64,
+  rijMid::Matrix{Float64},
+  arcLengths::Vector{Float64},
+  numSegments::Int64,
+  numSegmentsMod::Int64,
+  incidentWave::SVector{3, Function},
+  γ::Union{ComplexF64, Float64}
+  )
+
+banded = 2
+# calculates boundary wall method
+waveNumber      = norm(waveVector)
+waveAzimuth       = atan(waveVector[2], waveVector[1]) # only the azimuth is needed for greens func
+
+# 2d geometry
+waveAtBoundaryX = [incidentWave[1](waveVector,x,y,zDomain) for (x,y) in zip(xMid,yMid)];
+waveAtBoundaryY = [incidentWave[2](waveVector,x,y,zDomain) for (x,y) in zip(xMid,yMid)];
+waveAtBoundaryZ = [incidentWave[3](waveVector,x,y,zDomain) for (x,y) in zip(xMid,yMid)];
+
+_wave_X = [incidentWave[1](waveVector,x,y,zDomain) for (x,y) in zip(xDomain, yDomain)];
+_wave_Y = [incidentWave[2](waveVector,x,y,zDomain) for (x,y) in zip(xDomain, yDomain)];
+_wave_Z = [incidentWave[3](waveVector,x,y,zDomain) for (x,y) in zip(xDomain, yDomain)];
+
+rMid = SVector.(xMid, yMid, zDomain)
+rPos = CircularArray(SVector.(xBoundary, yBoundary, zDomain)[1:end])
+rDom = SVector.(xDomain, yDomain, zDomain)
+# calculate M matrix
+
+_g = calcGreenTensor(waveVector,σ,rijMid,arcLengths,banded,rMid,rPos,numSegments) # greens tensor
+
+# TODO: fix this 2D -> 3D meshes
+
+
+greensTensor = [I(numSegments) - γ*_g[1] -γ*_g[2] -γ*_g[3]; 
+               -γ*_g[2] I(numSegments) - γ*_g[4] -γ*_g[5]; 
+               -γ*_g[3] -γ*_g[5] I(numSegments) - γ*_g[6]]
+
+# println("new method")
+# dindex = diagind(size(rijMid)...)
+# Mxx,Mxy,Myy,Mzz = σ .* calcGreenTensor(waveNumber, waveAzimuth, rijMid, arcLengths, dindex)
+
+# greensTensor = [Mxx Mxy zero(Mzz); Mxy Myy zero(Mzz); zero(Mxx) zero(Myy) Mzz] # ./ arcLengths[1] # normalization stuff
+println("Solving system of equations")
+TPHI = γ * solve(LinearProblem(greensTensor, [waveAtBoundaryX; waveAtBoundaryY; waveAtBoundaryZ])).u
+
+TPHI_X = TPHI[1:numSegments]
+TPHI_Y = TPHI[numSegments+1:2numSegments]
+TPHI_Z = TPHI[2numSegments+1:3numSegments]
+
+@inbounds for j in 1:numSegments-1
+  #   # RR = @.  hypot(xDomain  - (@view xMid[j]), yDomain - (@view yMid[j]))
+#   # wave += @. σ * calcGreenFun(waveNumber,RR) * (@view arcLengths[j]) * (@view TPHI[j])
+  @inbounds for (i,_r) in enumerate(rDom)
+    if waveNumber*norm(rMid[j] - _r) < 0.1 # perform integral
+      G_xx = first(hquadrature(t->calcGreenFun(:xx,waveAzimuth,waveVector,norm(_r-r(rPos[j],rPos[j+1],t))),0.0,1.0))#,maxevals=10_000_000))
+      G_xy = first(hquadrature(t->calcGreenFun(:xy,waveAzimuth,waveVector,norm(_r-r(rPos[j],rPos[j+1],t))),0.0,1.0))#,maxevals=10_000_000))
+      G_xz = first(hquadrature(t->calcGreenFun(:xz,waveAzimuth,waveVector,norm(_r-r(rPos[j],rPos[j+1],t))),0.0,1.0))#,maxevals=10_000_000))
+      G_yy = first(hquadrature(t->calcGreenFun(:yy,waveAzimuth,waveVector,norm(_r-r(rPos[j],rPos[j+1],t))),0.0,1.0,maxevals=10_000_000))
+      G_yz = first(hquadrature(t->calcGreenFun(:yz,waveAzimuth,waveVector,norm(_r-r(rPos[j],rPos[j+1],t))),0.0,1.0,maxevals=10_000_000))
+      G_zz = first(hquadrature(t->calcGreenFun(:zz,waveAzimuth,waveVector,norm(_r-r(rPos[j],rPos[j+1],t))),0.0,1.0,maxevals=10_000_000))
+      
+      _wave_X[i] += σ * ( G_xx*TPHI_X[j]+G_xy*TPHI_Y[j]+G_xz*TPHI_Z[j] ) * norm(rPos[j] - rPos[j+1]) # arcLengths[j]
+      _wave_Y[i] += σ * ( G_xy*TPHI_X[j]+G_yy*TPHI_Y[j]+G_yz*TPHI_Z[j] ) * norm(rPos[j] - rPos[j+1]) # arcLengths[j]
+      _wave_Z[i] += σ * ( G_xz*TPHI_X[j]+G_yz*TPHI_Y[j]+G_zz*TPHI_Z[j] ) * norm(rPos[j] - rPos[j+1]) # arcLengths[j]
+
+    else # mean value approximation to integral
+      G_xx = calcGreenFun(:xx, waveAzimuth,waveVector,norm(rMid[j]-_r))
+      G_xy = calcGreenFun(:xy, waveAzimuth,waveVector,norm(rMid[j]-_r))
+      G_xz = calcGreenFun(:xz, waveAzimuth,waveVector,norm(rMid[j]-_r))
+      G_yy = calcGreenFun(:yy, waveAzimuth,waveVector,norm(rMid[j]-_r))
+      G_yz = calcGreenFun(:yz, waveAzimuth,waveVector,norm(rMid[j]-_r))
+      G_zz = calcGreenFun(:zz, waveAzimuth,waveVector,norm(rMid[j]-_r))
+
+      _wave_X[i] += σ * ( G_xx*TPHI_X[j]+G_xy*TPHI_Y[j]+G_xz*TPHI_Z[j] ) * arcLengths[j]
+      _wave_Y[i] += σ * ( G_xy*TPHI_X[j]+G_yy*TPHI_Y[j]+G_yz*TPHI_Z[j] ) * arcLengths[j]
+      _wave_Z[i] += σ * ( G_xz*TPHI_X[j]+G_yz*TPHI_Y[j]+G_zz*TPHI_Z[j] ) * arcLengths[j]
+    end
+  end
+end
+
+# wave =  + potentialContribution; # Huygens-like principle
+# return -inv(Mij)
+# T = -inv(Mij)
+# return T[id]
+return _wave_X, _wave_Y, _wave_Z
+end
+
+"""
+  `boundaryWallWave(waveVector::SVector{3,Float64},...)`
+
+Computes the vectorial scattering for 3D incidence.
+
+# Arguments:
+- `waveVector::SVector{3,Float64}`: self explanatory
+"""
+function boundaryWallVec(
+  waveVector::SVector{3,Float64},
+  xMid::Vector{Float64},
+  yMid::Vector{Float64},
+  xBoundary::Vector{Float64},
+  yBoundary::Vector{Float64},
+  xDomain::Vector{Float64}, 
+  yDomain::Vector{Float64},
+  zDomain::Vector{Float64},
+  σ::ComplexF64,
+  rijMid::Matrix{Float64},
+  arcLengths::Vector{Float64},
+  numSegments::Int64,
+  numSegmentsMod::Int64,
+  incidentWave::SVector{3, Function},
+  γ::Union{ComplexF64, Float64}
+  )
+
+banded = 2
+# calculates boundary wall method
+waveNumber      = norm(waveVector)
+waveAzimuth       = atan(waveVector[2], waveVector[1]) # only the azimuth is needed for greens func
+
+# 2d geometry
+waveAtBoundaryX = [incidentWave[1](waveVector,x,y,0.0) for (x,y) in zip(xMid,yMid)];
+waveAtBoundaryY = [incidentWave[2](waveVector,x,y,0.0) for (x,y) in zip(xMid,yMid)];
+waveAtBoundaryZ = [incidentWave[3](waveVector,x,y,0.0) for (x,y) in zip(xMid,yMid)];
+
+_wave_X = [incidentWave[1](waveVector,x,y,z) for (x,y,z) in zip(xDomain, yDomain, zDomain)];
+_wave_Y = [incidentWave[2](waveVector,x,y,z) for (x,y,z) in zip(xDomain, yDomain, zDomain)];
+_wave_Z = [incidentWave[3](waveVector,x,y,z) for (x,y,z) in zip(xDomain, yDomain, zDomain)];
+
+rMid = SVector.(xMid, yMid, 0.0)
+rPos = CircularArray(SVector.(xBoundary, yBoundary, 0.0)[1:end])
+rDom = SVector.(xDomain, yDomain, zDomain)
+# calculate M matrix
+
+_g = calcGreenTensor(waveVector,σ,rijMid,arcLengths,banded,rMid,rPos,numSegments) # greens tensor
+
+# TODO: fix this 2D -> 3D meshes
+
+
+greensTensor = [I(numSegments) - γ*_g[1] -γ*_g[2] -γ*_g[3]; 
+               -γ*_g[2] I(numSegments) - γ*_g[4] -γ*_g[5]; 
+               -γ*_g[3] -γ*_g[5] I(numSegments) - γ*_g[6]]
+
+# println("new method")
+# dindex = diagind(size(rijMid)...)
+# Mxx,Mxy,Myy,Mzz = σ .* calcGreenTensor(waveNumber, waveAzimuth, rijMid, arcLengths, dindex)
+
+# greensTensor = [Mxx Mxy zero(Mzz); Mxy Myy zero(Mzz); zero(Mxx) zero(Myy) Mzz] # ./ arcLengths[1] # normalization stuff
+println("Solving system of equations")
+TPHI = γ * solve(LinearProblem(greensTensor, [waveAtBoundaryX; waveAtBoundaryY; waveAtBoundaryZ])).u
+
+TPHI_X = TPHI[1:numSegments]
+TPHI_Y = TPHI[numSegments+1:2numSegments]
+TPHI_Z = TPHI[2numSegments+1:3numSegments]
+
+@inbounds for j in 1:numSegments-1
+  #   # RR = @.  hypot(xDomain  - (@view xMid[j]), yDomain - (@view yMid[j]))
+#   # wave += @. σ * calcGreenFun(waveNumber,RR) * (@view arcLengths[j]) * (@view TPHI[j])
+  @inbounds for (i,_r) in enumerate(rDom)
+    if waveNumber*norm(rMid[j] - _r) < 0.5 # perform integral
+      G_xx = first(hquadrature(t->calcGreenFun(:xx,waveAzimuth,waveVector,norm(_r-r(rPos[j],rPos[j+1],t))),0.0,1.0,maxevals=1_000_000))
+      G_xy = first(hquadrature(t->calcGreenFun(:xy,waveAzimuth,waveVector,norm(_r-r(rPos[j],rPos[j+1],t))),0.0,1.0,maxevals=1_000_000))
+      G_xz = first(hquadrature(t->calcGreenFun(:xz,waveAzimuth,waveVector,norm(_r-r(rPos[j],rPos[j+1],t))),0.0,1.0,maxevals=1_000_000))
+      G_yy = first(hquadrature(t->calcGreenFun(:yy,waveAzimuth,waveVector,norm(_r-r(rPos[j],rPos[j+1],t))),0.0,1.0,maxevals=1_000_000))
+      G_yz = first(hquadrature(t->calcGreenFun(:yz,waveAzimuth,waveVector,norm(_r-r(rPos[j],rPos[j+1],t))),0.0,1.0,maxevals=1_000_000))
+      G_zz = first(hquadrature(t->calcGreenFun(:zz,waveAzimuth,waveVector,norm(_r-r(rPos[j],rPos[j+1],t))),0.0,1.0,maxevals=1_000_000))
+      
+      _wave_X[i] += σ * ( G_xx*TPHI_X[j]+G_xy*TPHI_Y[j]+G_xz*TPHI_Z[j] ) * norm(rPos[j] - rPos[j+1]) # arcLengths[j]
+      _wave_Y[i] += σ * ( G_xy*TPHI_X[j]+G_yy*TPHI_Y[j]+G_yz*TPHI_Z[j] ) * norm(rPos[j] - rPos[j+1]) # arcLengths[j]
+      _wave_Z[i] += σ * ( G_xz*TPHI_X[j]+G_yz*TPHI_Y[j]+G_zz*TPHI_Z[j] ) * norm(rPos[j] - rPos[j+1]) # arcLengths[j]
+
+    else # mean value approximation to integral
+      G_xx = calcGreenFun(:xx, waveAzimuth,waveVector,norm(rMid[j]-_r))
+      G_xy = calcGreenFun(:xy, waveAzimuth,waveVector,norm(rMid[j]-_r))
+      G_xz = calcGreenFun(:xz, waveAzimuth,waveVector,norm(rMid[j]-_r))
+      G_yy = calcGreenFun(:yy, waveAzimuth,waveVector,norm(rMid[j]-_r))
+      G_yz = calcGreenFun(:yz, waveAzimuth,waveVector,norm(rMid[j]-_r))
+      G_zz = calcGreenFun(:zz, waveAzimuth,waveVector,norm(rMid[j]-_r))
+
+      _wave_X[i] += σ * ( G_xx*TPHI_X[j]+G_xy*TPHI_Y[j]+G_xz*TPHI_Z[j] ) * arcLengths[j]
+      _wave_Y[i] += σ * ( G_xy*TPHI_X[j]+G_yy*TPHI_Y[j]+G_yz*TPHI_Z[j] ) * arcLengths[j]
+      _wave_Z[i] += σ * ( G_xz*TPHI_X[j]+G_yz*TPHI_Y[j]+G_zz*TPHI_Z[j] ) * arcLengths[j]
+    end
+  end
+end
+
+# wave =  + potentialContribution; # Huygens-like principle
+# return -inv(Mij)
+# T = -inv(Mij)
+# return T[id]
+return _wave_X, _wave_Y, _wave_Z
+end
 
 """
   `calcStokes(Ex::ComplexF64, Ey::ComplexF64)`
@@ -925,30 +1233,17 @@ function calcGreenFunSmall(type::Symbol, θ::Float64, k::Float64, r::Float64)
   # make this broadcasted 
   
   if type == :xx
-    if r < 0.1
-      println("approximation used")
-      return im/pi * (
-             sin(θ)^2  * (2*eGamma - im*pi + 2log(k*r/2) - 0.25*(-2+2eGamma-im*pi+2log(0.5*k*r))*(k*r)^2) +
-             cos(2θ)/k * (-2(k*r)^(-2) + 0.5*(-1+2eGamma-im*pi+2log(0.5*k*r)) + 0.03125*(5 - 4eGamma+2im*pi-4log(0.5*k*r))*(k*r)^2)
-             )
-    end
-    return sin(θ)^2 * hankelh1(0, k*r) + im/4 * cos(2θ)/(k*r)*hankelh1(1, k*r)
+        return sin(θ)^2 * hankelh1(0, k*r) + im * 0.25 * cos(2θ)/(k*r)*hankelh1(1, k*r)
   elseif type==:xy
-    if r < 0.1
-      println("approximation used")
-      return im/pi * sin(2θ) * 0.5 * (-4 * (k*r)^(-2) - 1  + 0.0625*(-3+4eGamma-2im*pi+4log(0.5*k*r))*(k*r)^2)
-    end
-    return sin(2θ)/2 * hankelh1(2, k*r)
+    # if r < 0.1
+    #   println("approximation used")
+    #   return im/pi * sin(2θ) * 0.5 * (-4 * (k*r)^(-2) - 1  + 0.0625*(-3+4eGamma-2im*pi+4log(0.5*k*r))*(k*r)^2)
+    # end
+    return sin(2θ) * 0.5 * hankelh1(2, k*r)
   elseif type==:yy
-    if r < 0.1
-      println("approximation used")
-
-      return im/pi * (
-             cos(θ)^2  * (2*eGamma - im*pi + 2log(k*r/2)- (-2+2eGamma-im*pi+2log(k*r/2))/4*(k*r)^2) - 
-             cos(2θ)/k * (-2(k*r)^(-2) + 0.5*(-1+2eGamma-im*pi+2log(0.5*k*r)) + 0.03125*(5 - 4eGamma+2im*pi-4log(0.5*k*r))*(k*r)^2)
-             )
-    end
     return (cos(θ)^2 * hankelh1(0, k*r) - im/4 * cos(2θ)/(k*r)*hankelh1(1, k*r))
+  # elseif type==:xz
+    # return 0.25 * 
   elseif type==:zz
     return hankelh1(0, k*r)
   end

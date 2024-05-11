@@ -1,18 +1,20 @@
-using CairoMakie
-using StaticArrays: SVector
+using GLMakie
 using LinearAlgebra
 using Meshes
+using CircularArrays
 
-using BoundaryWall
+import BoundaryWall as BWM
+using StaticArrays
 
 begin # definitions
 HBAR        = 1.0
 MASS        = HBAR/2
 SIGMA       = (2*MASS/HBAR^2)*(1/4*im)
 N           = 100
-NDOM        = 150
+NDOM        = 50
 ϕ           = 135
-waveVector  = sqrt(1.365)*SVector(cosd(ϕ), sind(ϕ)) # parabolic billiard eigenstate
+waveNumber  = sqrt(2.637553)
+waveVector  = waveNumber*SVector(cosd(ϕ), sind(ϕ)) # parabolic billiard eigenstate
 end
 ################################################################################
 # # parametric curve 
@@ -30,7 +32,9 @@ end
 ################################################################################
 
 # builtin geometry (parabolic billiard)
-y, x,ym, xm, distance_matrix, arc_lengths = createConfocalBilliard(2.0, 3.0, N)
+y, x,ym, xm, distance_matrix, arc_lengths = BWM.createConfocalBilliard(2.0, 3.0, N)
+
+rij = SizedMatrix{N,N}(distance_matrix)
 
 # domain
 x0, xf = (-8.5, 8.5)
@@ -43,15 +47,16 @@ COORDS = SVector.(coordinates.(vertices(MESH)))
 
 XDOM, YDOM = first.(COORDS), last.(COORDS)
 
-banded = 2
+banded = 5
 
+@time wave = BWM.boundaryWallWave(waveVector, (k,r)->BWM.planeWave(k,r), x, y, xm, ym, XDOM, YDOM, SIGMA, arc_lengths, distance_matrix, length(arc_lengths), N, banded, Inf);
 
-@time wave = boundaryWallWave(waveVector, (k,r)->BoundaryWall.planeWave(k,r), x, y, xm, ym, XDOM, YDOM, SIGMA, arc_lengths, distance_matrix, length(arc_lengths), N, banded, Inf);
+# for j in 1:N
+
+# end
 
 # xp, yp, u, v = BoundaryWall.gradient(xdom, ydom, wave)
 
-
-heatmap(xdom, ydom,abs2.(reshape(wave, NDOM, NDOM)))
 let 
   fig = Figure(size=(500,500))
   ax = Axis(fig[1,1],
@@ -68,12 +73,12 @@ let
   # heatmap!(ax, xdom[:], ydom[:], real(wave), colormap=:dense)
   # scatter!(ax, XDOM, YDOM, color=real)
   # viz!(ax, MESH, color=abs2.(wave), shading=NoShading, colormap=:linear_kbgyw_5_98_c62_n256)
-  heatmap!(ax, xdom, ydom, abs2.(reshape(wave, NDOM, NDOM)),interpolate=true, colormap=:turbo)
+  heatmap!(ax, xdom, ydom, abs2.(reshape(wave, NDOM, NDOM)),interpolate=false, colormap=:turbo)
   # viz!(ax[3], MESH, color=abs2.(wave), shading=false, colorscheme=:dense)
   
   
   lines!(ax, x, y,color=:white)
   ax.aspect=DataAspect() 
-  save("./docs/src/assets/wave.png", fig)
+  # save("./docs/src/assets/wave.png", fig)
   fig
 end

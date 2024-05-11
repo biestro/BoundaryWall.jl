@@ -27,8 +27,8 @@ Creates a circle
 """
 function createCircle(r::Float64, θ::LinRange, SHIFT::SVector{2, Float64})
   x,y    = r * cos.(θ) .+ SHIFT[1], r * sin.(θ) .+ SHIFT[2]
-  xm, ym = BWM_geometry.calcMidpoints(x,y)
-  ds     = BWM_geometry.calcArcLength(x,y)
+  xm, ym = calcMidpoints(x,y)
+  ds     = calcArcLength(x,y)
   return x,y,xm,ym,ds
 end
 
