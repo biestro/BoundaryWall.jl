@@ -23,3 +23,15 @@ buildGrid
 ```@example grids
 buildGrid(HexagonalGrid(SVector(0.0, 0.0), 0.5), 8, 6) |> scatter
 ```
+
+One can use these as centers for other boundaries.
+
+```@example grids
+N       = 20
+R       = 0.2
+centers = buildGrid(HexagonalGrid(SVector(0.0, 0.0), 0.5), 8, 6)
+circ    = [createEllipse(R,2R/3, LinRange(-pi,pi,N), rand()*2pi, c) for c in centers]
+x  = vcat(getindex.(circ, 1)...)
+y  = vcat(getindex.(circ, 2)...)
+scatter(x,y)
+```

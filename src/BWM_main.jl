@@ -46,15 +46,28 @@ segmentIterator(v::CircularVector,numSegments::Int64) = filter( x -> mod(x,numSe
 Base.atan(v::SVector{2,Float64}) = atan(v[2],v[1])
 
 
-"""simple plane wave"""
+"""
+  planeWave
+
+Calculates a plane wave with a two dimensional wave vector. 
+# Arguments
+- `k::SVector{2, Float64}`: wave vector
+- `r::SVector{2, Float64}`: distance
+"""
 planeWave(k::SVector{2, Float64}, r::SVector{2, Float64}) = exp(-1im * dot(k,r))
 
-"""Willis et al (2008). Amplified total internal reflection: theory, analysis, and demonstration of existence via FDTD. Opt Lett.
-
-Be mindful of the convergence, as some expansions might not converge fast enough (e.g. very long gaussian pulses)
-
 """
-gaussianWave(k::SVector{2, Float64}, r::SVector{2, Float64}, ω::Float64; abstol=0) = 1/2pi * first(hquadrature(t -> pi * ω^2 * exp(-(ω*(t-atan(k))/2)^2) * planeWave(norm(k)*SVector(cos(t),sin(t)),r), -pi/2+atan(k), pi/2+atan(k); atol=abstol))
+  gaussianWave
+
+Builds a gaussian wave as a superposition of plane waves.
+
+# Arguments
+- `k::SVector{2, Float64}`: wave vector 
+- `r::SVector{2, Float64}`: distance
+- `ω::Float64`: beam width
+- `abstol=1e-9`: quadrature tolerance
+"""
+gaussianWave(k::SVector{2, Float64}, r::SVector{2, Float64}, ω::Float64; abstol=1e-9) = 1/2pi * first(hquadrature(t -> pi * ω^2 * exp(-(ω*(t-atan(k))/2)^2) * planeWave(norm(k)*SVector(cos(t),sin(t)),r), -pi/2+atan(k), pi/2+atan(k); atol=abstol))
 
 # gaussianWave(k::SVector{3, Float64}, r::SVector{3, Float64}, ω::Float64; abstol=0) = 1/2pi * first(hquadrature(t -> pi * ω^2 * exp(-(ω*(t-atan(k))/2)^2) * planeWave(norm(k)*SVector(cos(t),sin(t)),r), -pi/2+atan(k), pi/2+atan(k); atol=abstol))
 
@@ -62,13 +75,13 @@ gaussianWave(k::SVector{2, Float64}, r::SVector{2, Float64}, ω::Float64; abstol
 shapedWave(k::SVector{2, Float64}, r::SVector{2, Float64}, ω::Float64; abstol=0) = 1/2pi * first(hquadrature(t -> exp(-((t-atan(k))/ω)^2) * planeWave(norm(k)*SVector(cos(t),sin(t)),r), -pi/2+atan(k), pi/2+atan(k); atol=abstol))
 
 
-function heavyside(x::Float64, xp::Float64)
-  return sign(x-xp)
-end
+# function heavyside(x::Float64, xp::Float64)
+#   return sign(x-xp)
+# end
 
-function window(x::Float64,a::Float64,b::Float64)
-  return heavyside(x, a) - heavyside(x,b)
-end
+# function window(x::Float64,a::Float64,b::Float64)
+#   return heavyside(x, a) - heavyside(x,b)
+# end
 
 """
   `calcMmatrix(waveNumber,σ,rijMid,arcLengths,dindex)`
@@ -81,7 +94,7 @@ integration methods.
 
 # Arguments:
 - `waveNumber::Float64`: self explanatory
-- `σ::ComplexF64`: Free particle Green's function parameter 
+- `σ::ComplexF64`: free particle Green's function parameter 
 - `rijMid::Matrix`: distance matrix between segments
 - `arcLengths::Vector`: self explanatory
 - `dindex::StepRange`: indexes for diagonal, supplied beforehand
@@ -1204,7 +1217,7 @@ end
 # return -inv(Mij)
 # T = -inv(Mij)
 # return T[id]
-return _wave_X, _wave_Y, _wave_Z
+return _wave_X, _wave_Y, _wave_Z, _g
 end
 
 """
@@ -1217,37 +1230,37 @@ function calcStokes(Ex::ComplexF64, Ey::ComplexF64)
   return s0, (abs2(Ex) - abs2(Ey)) / s0, 2*real(conj(Ex)*Ey)/s0, 2*imag(conj(Ex)*Ey)/s0
 end
 
-"""
-  `calcGreenFun(type::Symbol, θ::Float64, k::Float64, r::Float64)`
+# """
+#   `calcGreenFun(type::Symbol, θ::Float64, k::Float64, r::Float64)`
 
-Calculates Green's dyads for parallel incidence.
+# Calculates Green's dyads for parallel incidence.
 
-# Arguments:
-- `type`: A symbol, either :xx, :xy, :yy, or :zz. It denotes the dyadic of Green's 
-        tensor to calculate.
-- `θ`:    Incident angle.
-- `k`:    Wave number.
-- `r`:    Distance |r - r'|
-"""
-function calcGreenFunSmall(type::Symbol, θ::Float64, k::Float64, r::Float64)
-  # make this broadcasted 
+# # Arguments:
+# - `type`: A symbol, either :xx, :xy, :yy, or :zz. It denotes the dyadic of Green's 
+#         tensor to calculate.
+# - `θ`:    Incident angle.
+# - `k`:    Wave number.
+# - `r`:    Distance |r - r'|
+# """
+# function calcGreenFunSmall(type::Symbol, θ::Float64, k::Float64, r::Float64)
+#   # make this broadcasted 
   
-  if type == :xx
-        return sin(θ)^2 * hankelh1(0, k*r) + im * 0.25 * cos(2θ)/(k*r)*hankelh1(1, k*r)
-  elseif type==:xy
-    # if r < 0.1
-    #   println("approximation used")
-    #   return im/pi * sin(2θ) * 0.5 * (-4 * (k*r)^(-2) - 1  + 0.0625*(-3+4eGamma-2im*pi+4log(0.5*k*r))*(k*r)^2)
-    # end
-    return sin(2θ) * 0.5 * hankelh1(2, k*r)
-  elseif type==:yy
-    return (cos(θ)^2 * hankelh1(0, k*r) - im/4 * cos(2θ)/(k*r)*hankelh1(1, k*r))
-  # elseif type==:xz
-    # return 0.25 * 
-  elseif type==:zz
-    return hankelh1(0, k*r)
-  end
-end
+#   if type == :xx
+#         return sin(θ)^2 * hankelh1(0, k*r) + im * 0.25 * cos(2θ)/(k*r)*hankelh1(1, k*r)
+#   elseif type==:xy
+#     # if r < 0.1
+#     #   println("approximation used")
+#     #   return im/pi * sin(2θ) * 0.5 * (-4 * (k*r)^(-2) - 1  + 0.0625*(-3+4eGamma-2im*pi+4log(0.5*k*r))*(k*r)^2)
+#     # end
+#     return sin(2θ) * 0.5 * hankelh1(2, k*r)
+#   elseif type==:yy
+#     return (cos(θ)^2 * hankelh1(0, k*r) - im/4 * cos(2θ)/(k*r)*hankelh1(1, k*r))
+#   # elseif type==:xz
+#     # return 0.25 * 
+#   elseif type==:zz
+#     return hankelh1(0, k*r)
+#   end
+# end
 
 function polarizedField(k::SVector{2, Float64}, x::Float64, y::Float64, ϕ::Float64)
   return exp(im*ϕ)*exp(-im * (k[1] * x + k[2] * y))
@@ -1256,7 +1269,8 @@ end
 """
 My own gradient function for 2d rectangular meshes.
 
-In principle, the gradient can be calculated using the BWM
+In principle, the gradient can be calculated using the BWM, but it deals with hankel
+functions of order 1, which have bad convergence.
 """
 function gradient(xdom::LinRange, ydom::LinRange, z::Vector{ComplexF64})
   @assert length(z)==length(xdom)*length(ydom) "Array's length don't match"
