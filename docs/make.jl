@@ -14,7 +14,8 @@ format = Documenter.HTML(
         mathengine=KaTeX(
                 Dict(:macros => Dict("\\x" => "\\boldsymbol{x}"))
                 ),
-        assets = ["assets/custom.css",],
+        assets = ["assets/favico.ico",
+                  "assets/custom.css",],
         ),
 
 pages = Any[
@@ -34,3 +35,6 @@ pages = Any[
                 ]
 )
 
+deploydocs(
+           repo = "github.com/ModifiedBear/BoundaryWall.jl"
+          )
