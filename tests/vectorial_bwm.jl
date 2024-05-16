@@ -32,8 +32,8 @@ N = 150
 R  = 1/sqrt(2)
 # x,y,xm,ym,rij,ds = BWM.createConfocalBilliard(3.0, 2.0, N)
 TH = LinRange(-pi, pi, N)
-# circ = [BWM.createEllipse(R, R, TH, 1.0pi, SVector(0.0, y0)) for y0 in [-2.0, 2.0]]
-circ = [BWM.createEllipse(0.0, 3R, TH .* 0.5, pi/4, SVector(0.0, 0.0))]
+circ = [BWM.createEllipse(R, R, TH, 1.0pi, SVector(0.0, y0)) for y0 in [-2.0, 2.0]]
+# circ = [BWM.createEllipse(2R, 3R, TH[1:end-1], pi/4, SVector(0.0, 0.0))]
 # circ = GeometryUtils.buildConfocalBilliard(3.0, 2.0, N)
 x  = vcat(getindex.(circ,1)...)
 y  = vcat(getindex.(circ,2)...)
@@ -44,20 +44,20 @@ rij = BWM.calcDistances(xm, ym)
 
 scatter(x,y)
 
-fieldEx(k::SVector{3, Float64}, x::Float64, y::Float64, z::Float64) = gaussianWave(k, SVector(x,y,z), 5.0; abstol=1e-8)
+fieldEx(k::SVector{3, Float64}, x::Float64, y::Float64, z::Float64) = polarizedField(k, x, y, z, 0.0)# gaussianWave(k, SVector(x,y,z), 5.0; abstol=1e-8)
 fieldEy(k::SVector{3, Float64}, x::Float64, y::Float64, z::Float64) = polarizedField(k, x, y, z, 0.0)
 fieldEz(k::SVector{3, Float64}, x::Float64, y::Float64, z::Float64) = polarizedField(k, x, y, z, 0.0)
 
 # waveNumber = 10.1735# 3.8317
 waveNumber = 4sqrt(2.637553)
-kRho       = SVector(1.0, 0.0)
-kz         = 0.0
+kRho       = SVector(0.5, 1.0)
+kz         = 1.0
 
 waveVector = waveNumber * SVector(kRho..., kz) / norm(SVector(kRho..., kz))
 
 
 
-permittivity_strength = -100.0
+permittivity_strength = 100.0
 
 
 Ex, Ey, Ez = BWM.boundaryWallVec(waveVector, 

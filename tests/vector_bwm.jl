@@ -27,17 +27,14 @@ lines(x,y)
 waveNumber = sqrt(1.802926)
 th = 0.0
 waveVector = SVector(cosd(th), sind(th)) * waveNumber
-Mxx, Mxy, Myy, Mzz = BWM.calcGreenTensor(waveNumber, 
-                             deg2rad(th), 
-                             σ, 
-                             rij,
-                             ds, 
-                             2, 
-                             rMid, 
-                             rPos,
-                             N);
 
-heatmap(abs2.(-inv(Mxx)))
+_g = BoundaryWall.calcGreenTensor(waveVector,-0.25im,rij,ds,4,rMid,rPos,length(ds)) # greens tensor
+
+γ = 10000.0
+greenMatrix = [I(N) - γ*_g[1] -γ*_g[2] -γ*_g[3]; 
+               -γ*_g[2] I(N) - γ*_g[4] -γ*_g[5]; 
+               -γ*_g[3] -γ*_g[5] I(N) - γ*_g[6]]
+heatmap(abs2.(-inv(greenMatrix)), colorscale=log10)
 
 Ex0(k::SVector{2, Float64}, x::Float64, y::Float64) = BWM.polarizedField(k, x, y, 0.0)
 Ey0(k::SVector{2, Float64}, x::Float64, y::Float64) = BWM.polarizedField(k, x, y, 0.0)
