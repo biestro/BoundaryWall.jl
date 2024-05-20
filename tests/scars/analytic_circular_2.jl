@@ -108,7 +108,7 @@ function circleWave(k::Union{Float64, BigFloat},
                     _N_sum::Int64)
 
     # _params = [SVector(im^n,omegaN(n,p,γ,σ,k,R),cos(n*(r[2]+(-1)^n*α)),uN(n,γ,σ,k,R)) for n in 1:_N_sum]
-    _params = [SVector(im^n,omegaN(n,p),cos(n*(r[2]+(-1)^n*α)),uN(n,p,k,R)) for n in 1:_N_sum]
+    _params = [SVector(im^n,omegaN(n,p),cos(n*(r[2])),uN(n,p,k,R)) for n in 1:_N_sum]
     _Jn = GSL.sf_bessel_Jn_array(1,_N_sum,k*r[1])
     
     if r[1]<R
@@ -131,27 +131,6 @@ function circleWave(k::Union{Float64, BigFloat},
 end
 
 
-function circleDaLuz(
-    k::Union{Float64,BigFloat},
-    R::Union{Float64, BigFloat},
-    r::Union{SVector{2,Float64}, SVector{2,BigFloat}},
-    n::Int64
-    )
-    if r[1]<R
-        # not assuming k_m,n other than eigenvalues
-        # there is always tunneling
-        return GSL.sf_bessel_Jn(n,k*r[1])*exp(im*n*r[2])
-    else    
-
-    _Yn  = GSL.sf_bessel_Yn(n,k*R)
-    _Jn  = GSL.sf_bessel_Jn(n,k*R)
-    return im * exp(im*n*r[2]) * (GSL.sf_bessel_Jn(n,k*r[1]) - _Jn * (GSL.sf_bessel_Jn(n,k*r[1])+GSL.sf_bessel_Yn(n,k*r[1]))/(_Jn + im*_Yn))
-    end
-
-end
-
-
-
 
 import BoundaryWall as BWM
 
@@ -169,9 +148,9 @@ end
 begin # domain
 setrounding(BigFloat, RoundDown)
 setprecision(BigFloat, 256)  # Precision is set in bits
-nx,ny = 450,450
-x0, xf = (-1.0R, 1.0R)
-y0, yf = (-1.0R, 1.0R)
+nx,ny = 150,150
+x0, xf = (-2.5R, 2.5R)
+y0, yf = (-2.5R, 2.5R)
 xdom = LinRange(x0, xf, nx)
 ydom = LinRange(y0, yf, ny)
 GRID = RectilinearGrid(xdom, ydom)
@@ -186,6 +165,33 @@ polar_coords = [car2pol(_r...) for _r in COORDS]
 # polar_coords = [car2pol(_r...) for _r in SVector.(XDOM, YDOM)]
 
 end
+
+rot_matrix = 
+
+begin
+
+_m,_n  = 2,3
+_k     = FunctionZeros.besselj_zero(_m, _n)/R #
+_n_sum = 50
+wave_maioli = [circleWave(_k/R, Inf,SIGMA,R,_r,_m, 0.0, _n_sum) for _r in polar_coords]
+wave_maioli_rot = [circleWave(_k/R, Inf,SIGMA,R,_r,_m, pi/(2*_m), _n_sum) for _r in polar_coords]
+
+f_theta_inv = [im^_m * (exp(-2im * _m * t)+1) for t in last.(polar_coords)]
+
+end
+f_theta = [-tan(t*_m) for t in last.(polar_coords)]
+wave_scars = [(besselj(_m,_k*_r[1])*exp(im*_m*_r[2])/(sqrt(π)*R*besselj(_m-1,_k*R)))*(_r[1]<R) for _r in polar_coords]
+let 
+  GC.gc() 
+  fig =Figure()
+  ax = Axis(fig[1,1])
+  heatmap!(ax, xdom, ydom, reshape(abs2.(wave_maioli_rot ) , nx, ny), colormap=:turbo)
+  # heatmap!(ax, xdom, ydom, reshape(abs2.(wave_scars), nx, ny), co2lormap=:turbo)
+  # heatmap!(ax, xdom, ydom, reshape(angle.(wave_maioli ./ f_theta_inv), nx, ny), colormap=:twilight)
+  ax.aspect=DataAspect()
+  fig
+end
+
 
 
 using .Threads
