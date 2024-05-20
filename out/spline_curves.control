@@ -1,0 +1,30 @@
+\begin{MODEL}
+   \begin{OUTER_BOUNDARY}
+      \begin{CIRCULAR_ARC}
+         units = degrees
+         name = outerCircle
+         radius = 2.0
+         start angle = 45.0
+         center = [0.0,0.0,0.0]
+         end angle = 405.0
+      \end{CIRCULAR_ARC}
+   \end{OUTER_BOUNDARY}
+\end{MODEL}
+\begin{CONTROL_INPUT}
+   \begin{SPRING_SMOOTHER}
+      smoothing type = LinearAndCrossbarSpring
+      smoothing = ON
+   \end{SPRING_SMOOTHER}
+   \begin{BACKGROUND_GRID}
+      background grid size = [0.05,0.05,0.0]
+   \end{BACKGROUND_GRID}
+   \begin{RUN_PARAMETERS}
+      mesh file name = out/spline_curves.inp
+      plot file format = skeleton
+      plot file name = out/spline_curves.tec
+      stats file name = out/spline_curves.txt
+      mesh file format = ABAQUS
+      polynomial order = 5
+   \end{RUN_PARAMETERS}
+\end{CONTROL_INPUT}
+\end{FILE}
