@@ -82,3 +82,5 @@ function plotFieldDensity(f::Vector{Float64}, xdom, ydom, cmap)
   # save("")
   fig
 end
+
+

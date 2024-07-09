@@ -1,3 +1,6 @@
+# TODO: if process finds two peaks, continue with the first one, but insert the 
+# second one in the original resonance vector
+
 using BoundaryWall
 using StaticArrays
 using CircularArrays

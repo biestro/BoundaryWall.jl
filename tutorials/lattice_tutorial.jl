@@ -6,24 +6,27 @@ using LinearAlgebra: diagind
 
 using BoundaryWall
 
+rand_angle = rand(6*4)*2pi
+
 begin
 N = 40
 R = 1.5
 σ = -0.25im
 T = LinRange(0, 2pi, N)
-centers = buildGrid(SquareGrid((0.0, 0.0),5.0), 1,4)
+centers = buildGrid(SquareGrid((0.0, 0.0),5.0), 6,4)
 # centers = buildGrid(HexagonalGrid((0.0, 0.0),5.0), 8,8)
 Δr = maximum(centers) ./ 2
 map!(c->c .- Δr, centers, centers)
-# indices_to_delete = sort(sample(eachindex(centers), replace=false, length(centers)÷4))
-# deleteat!(centers, tuple(indices_to_delete...))
+indices_to_delete = sort(sample(eachindex(centers), replace=false, length(centers)÷5))
+deleteat!(centers, tuple(indices_to_delete...))
+deleteat!(rand_angle, tuple(indices_to_delete...))
 
 # indices_to_delete = [6,7,10,11]
 # deleteat!(centers, tuple(indices_to_delete...))
 
 
 
-circ = [createEllipse(R,R, T, pi/2, c) for (c,i) in zip(centers, LinRange(0,1, length(centers)))]
+circ = [createEllipse(R,2R/3, T, rand_angle[i], c) for (i,c) in enumerate(centers)]
 x  = vcat(getindex.(circ, 1)...)
 y  = vcat(getindex.(circ, 2)...)
 xm = vcat(getindex.(circ, 3)...)
@@ -59,15 +62,16 @@ banded = 2
 end
 let
   fig = Figure()
-  ax  = Axis(fig[1,1], title="banded (using |i-j|<$banded)")
+  ax  = Axis(fig[1,1], title="Lattice without defects")
   # viz!(ax, MESH, color=abs2.(wave), colormap=:linear_kbgyw_5_98_c62_n256)
   Z = abs2.(wave)
-  heatmap!(ax, xdom, ydom, reshape(Z, Nx, Ny))
+  heatmap!(ax, xdom, ydom, reshape(Z, Nx, Ny), colormap=:linear_kbgyw_5_98_c62_n256)
   ax.aspect=DataAspect() 
   # [lines!(ax, GeometryUtils.createCircle(R, LinRange(-pi, pi, 50), c)[1:2]..., color=:black) for ax in ax, c in centers]
-  [lines!(ax, createEllipse(R,R, T, pi/2, c)[1:2]..., color=:white) for (c,i) in zip(centers, LinRange(0,1, length(centers)))]
+  # [lines!(ax, createEllipse(R,R, T, pi/2, c)[1:2]..., color=:white) for (c,i) in zip(centers, LinRange(0,1, length(centers)))]
   # [lines!(ax, createEllipse(R,R, T, -i*pi/2, c)[1:2]..., color=:white) for (c,i) in zip(centers, LinRange(0,1, length(centers)))]
-  
+  scatter!(ax, x,y,color=:white, markersize=5)
+  save("lattice.png", fig,px_per_unit=4)
   fig
 end
 
