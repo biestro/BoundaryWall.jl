@@ -3,7 +3,7 @@
 ```@example grids
 using StaticArrays # hide
 using BoundaryWall # hide
-using CairoMakie # hide
+using WGLMakie # hide
 ```
 
 These methods implement grids similar to a Bravais lattice, as well as 

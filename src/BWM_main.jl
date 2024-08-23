@@ -201,7 +201,8 @@ function calcMmatrix(waveNumber::Float64,
   # Mij          = (@. σ * calcGreenFun(waveNumber, rijMid) * arcLengths[1]) #  arcLengths # multiplies cols by ds[j]
   # Mij = SizedMatrix{numSegments, numSegments}(Mij)
   # [Mij[i,j] = σ * calcGreenFun(waveNumber, rijMid[i,j]) * arcLengths[1] for i in 1:numSegments, j in 1:numSegments]
-  @threads for i in axes(Mij,1)
+  # @threads for i in axes(Mij,1)
+  for i in axes(Mij,1)
     for (j,_j) in zip(axes(Mij, 2), segmentIterator(_r, numSegments)) 
       if abs(i - j) < band
         Mij[i,j] = σ * first(hquadrature(t -> calcGreenFun(waveNumber, norm(_rm[i] - r(_r[_j], _r[_j+1], t))), 0.0, 1.0)) * norm(_r[_j] - _r[_j+1])
@@ -293,9 +294,9 @@ waveAtDomain   = waveFun.(Ref(waveVector), rDom)
 
 # midpoints and circular position vector
 
-
+println("Calculating M-matrix ...")
 Mij = calcMmatrix(waveNumber, σ, rijMid, arcLengths, band, rMid, rPos, numSegmentsMod)
-
+println("Calculating TΦ ...")
 TPHI = calcTPHI(Mij, waveAtBoundary, potentialStrength)
 
 # wave = zeros(ComplexF64, length(waveAtDomain))
@@ -306,19 +307,25 @@ TPHI = calcTPHI(Mij, waveAtBoundary, potentialStrength)
 
 # wave = sum(wave, dims=1)[:]
 # wave += waveAtDomain
-@inbounds @threads for j in 1:numSegments
+# @inbounds @threads for j in 1:numSegments
+println("Performing domain integration ...")
+@inbounds for j in 1:numSegments # segmentIterator(rPos, numSegmentsMod)
 #   # RR = @.  hypot(xDomain  - (@view xMid[j]), yDomain - (@view yMid[j]))
 #   # wave += @. σ * calcGreenFun(waveNumber,RR) * (@view arcLengths[j]) * (@view TPHI[j])
-  @inbounds for (i,_r) in enumerate(rDom)
-    if waveNumber*norm(rMid[j] - _r) < 0.5
-      # wave[i] += σ * calcGreenFun(waveNumber,norm(rMid[j] - _r)) * (arcLengths[j]) * (TPHI[j])
-      waveAtDomain[i] += σ*first(hquadrature(t->calcGreenFun(waveNumber, _r, r(rPos[j], rPos[j+1], t)), 0.0, 1.0))  * TPHI[j] * norm(rPos[j] - rPos[j+1])
-    else
-      waveAtDomain[i] += σ * calcGreenFun(waveNumber,norm(rMid[j] - _r)) * (arcLengths[j]) * (TPHI[j])
-    end
+  # @inbounds for (i,_r) in enumerate(rDom)
+  #   # if waveNumber*norm(rMid[j] - _r) < 1.5
+  #   #   # wave[i] += σ * calcGreenFun(waveNumber,norm(rMid[j] - _r)) * (arcLengths[j]) * (TPHI[j])
+  #   #   # TODO: add segment iterators, this breaks the method for multiple scatterers
+  #   #   waveAtDomain[i] += σ*first(hquadrature(t->calcGreenFun(waveNumber, _r, r(rPos[j], rPos[j+1], t)), 0.0, 1.0))  * TPHI[j] * norm(rPos[j] - rPos[j+1])
+  #   # else
+  #     waveAtDomain[i] += σ * calcGreenFun(waveNumber,norm(rMid[j] - _r)) * (arcLengths[j]) * (TPHI[j])
+  #   # end
 
-  end
+  # end
+  RR = @. hypot(xDomain  - (@view xMid[j]), yDomain - (@view yMid[j]))
+  waveAtDomain += @. σ * calcGreenFun(waveNumber, RR) * arcLengths[j] * TPHI[j]
 end
+println("Finished.")
 
 return waveAtDomain
 end

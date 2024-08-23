@@ -5,7 +5,7 @@ beam against a negative $\delta$ potential (note that it is only by setting a ne
 potential strength that one correctly models the optical behaviour).
 
 ```@example beam
-using GLMakie
+using WGLMakie
 using StaticArrays: SVector
 using LinearAlgebra
 using Meshes

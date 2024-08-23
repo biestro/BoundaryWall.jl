@@ -35,7 +35,7 @@ gaussianWave
     at infinity, which implies a slow convergence rate.
 
 ```@example beam
-using GLMakie # hide
+using WGLMakie # hide
 using BoundaryWall # hide
 using StaticArrays: SVector # hide
 

@@ -43,7 +43,7 @@ XDOM, YDOM = first.(COORDS), last.(COORDS)
 banded = 5
 
 
-@time wave = boundaryWallWave(waveVector, (k,r)->gaussianWave(k,r - SVector(0.0, 0.0), 10.0; abstol=1e-8), x, y, xm, ym, XDOM, YDOM, SIGMA, ds, rij, length(ds), N, banded, -10.0);
+@time wave = boundaryWallWave(waveVector, (k,r)->gaussianWave(k,r - SVector(0.0, 0.0), 10.0; abstol=1e-8), x, y, xm, ym, XDOM, YDOM, SIGMA, ds, rij, length(ds), N, banded, -7.0);
 
 # wave path
 xp, yp, u, v = BoundaryWall.gradient(xdom, ydom, wave)
@@ -52,20 +52,20 @@ xp, yp, u, v = BoundaryWall.gradient(xdom, ydom, wave)
 let 
   fig = Figure(size=(600,600))
   ax = Axis(fig[1,1],
-        xtickalign=1,ytickalign=1,
-        xticksmirrored=1,yticksmirrored=1,
+        xtickalign=0,ytickalign=0,
+        yticksmirrored=1,
         xgridvisible=false, ygridvisible=false,
         # xticklabelsvisible=false,yticklabelsvisible=false,
         xminorticksvisible=true,yminorticksvisible=true,
-        xminortickalign=1,
-        yminortickalign=1,
+        xminortickalign=0,
+        yminortickalign=0,
         xminorticks=IntervalsBetween(2),
         yminorticks=IntervalsBetween(2),
         )
-  ax.title = "Band integrated |i - j|<$banded"
+  ax.title = "Beam splitter simulation using negative potential"
   # viz!(ax, MESH, color=abs2.(wave), shading=NoShading, colormap=:turbo)
   # heatmap!(ax,xdom, ydom, real.(reshape(wave, NX, NY)), interpolate=true, colormap=:balance)
-  heatmap!(ax,xdom, ydom, abs2.(reshape(wave, NX, NY)), interpolate=true, colormap=:linear_kbgyw_5_98_c62_n256)
+  heatmap!(ax,xdom, ydom, real(reshape(wave, NX, NY)), interpolate=true, colormap=:linear_kbgyw_5_98_c62_n256)
 
   k = 8
   
@@ -80,7 +80,7 @@ let
   xlims!(ax, xdom[1], xdom[end])
   ylims!(ax, ydom[1], ydom[end])
   ax.aspect=DataAspect() 
-  # save("")
+  save("beam_splitter.png", fig,px_per_unit=2)
   fig
 end
 

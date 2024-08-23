@@ -16,7 +16,7 @@ Once one has a relatively accurate arc length discretization, one must calculate
 Finally, one might want to obtain the distance matrix representing $[\mathbf{r}]_{ij}=\mathbf{r}_{i}-\mathbf{r}_{j}$. The following example 
 
 ```@example midpoints
-using BoundaryWall, CairoMakie # hide
+using BoundaryWall, WGLMakie # hide
 θ     = LinRange(-pi, pi/2, 300)
 x,y   = cos.(θ),sin.(θ)
 
