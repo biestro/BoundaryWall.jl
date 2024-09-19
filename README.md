@@ -1,8 +1,6 @@
 # BoundaryWall.jl
 
-*Scattering Toolbox written in Julia.*
-
-Please read the tutorials while I finish the documentation.
+Simple toolbox that implements an integral method for solving for an incident (TM) wave with well behaved scatterers.
 
 ## Overview
 
@@ -34,23 +32,11 @@ toolbox in general.
 
 ## Installation
 
-Since this is not a package yet, one must clone this github repository or download the zip archive and extract all files. 
-
-1. Enter the parent directory `BoundaryWall.jl`.
-2. Enter the following command to open the Julia REPL.
-
-```sh
-$ julia --project=.
+```julia
+]add https://github.com/ModifiedBear/BoundaryWall.jl.git
+using BoundaryWall 
 ```
 
-Once in the REPL, do the following to precompile the dependencies.
-
-```julia-repl
-julia> using Pkg
-julia> Pkg.instantiate()
-```
-
-3. Done! 
 
 ## Quick guide
 
@@ -106,3 +92,7 @@ ax.aspect=DataAspect()
 f
 ```
 ![Parabolic billiard](docs/src/assets/wave.png)
+
+# TODO
+- Fix documentation
+- 
