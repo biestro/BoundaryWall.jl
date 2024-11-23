@@ -61,7 +61,7 @@ tri = discretize(PolyArea((minimum(x)-3R, minimum(y)-R),
                           FIST())
 mesh = refine_iterative(tri, 7, TriSubdivision())
 mesh = refine(mesh, TriRefinement())
-dom = coordinates.(mesh.vertices)
+dom = coords.(mesh.vertices)
 XDOM = first.(dom)
 YDOM = last.(dom)
 # mesh = refine(mesh, TriRefinement())

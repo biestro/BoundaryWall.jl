@@ -1,5 +1,6 @@
 using Makie
 
+
 """
   getPlottableMesh(ms::SimpleMesh)
 
@@ -17,7 +18,7 @@ function getPlottableMesh(ms::SimpleMesh)
   verts = vertices(_mesh)
   topo = topology(_mesh)
   elems = elements(topo)
-  coords = coordinates.(verts)
+  coords = coords.(verts)
   tris4elem = map(elems) do elem
     I = indices(elem)
     [[I[1], I[i], I[i + 1]] for i in 2:(length(I) - 1)]
@@ -53,3 +54,42 @@ function meshesToPolygons(M::SimpleMesh)
 end
 
 
+
+
+theme = Theme(
+  Axis = (
+    xgridvisible=false, 
+    ygridvisible=false, 
+    xtickalign=1, 
+    ytickalign=1,
+    xminorticksvisible = true,
+    yminorticksvisible = true,
+    xminorticks=IntervalsBetween(9),
+    yminorticks=IntervalsBetween(9),
+    xminortickalign=1,
+    yminortickalign=1,
+    xticksmirrored=true,
+    xminorticksmirrored=true,
+    yticksmirrored=true,
+    yminorticksmirrored=true,
+    ), 
+  Lines=(; 
+  cycle=:linestyle),
+  # palette = (color = to_colormap(:seaborn_colorblind), marker = []),
+  Scatter=(;
+    cycle=:marker,
+    # strokewidth=2,
+    # color=RGBAf(0.,0.,0.,0.),
+    strokecolor=:black),
+  ScatterLines=(;
+    cycle=Cycle([:linestyle, :marker], covary = true),
+    ),
+
+    )
+
+
+# colors = to_colormap(:okabe_ito)
+colors = Makie.wong_colors()
+cmap = Makie.to_colormap(Reverse(:linear_protanopic_deuteranopic_kbw_5_98_c40_n256))
+# cmap = Makie.to_colormap(Reverse(:linear_kbgyw_5_98_c62_n256))
+cmap[1] = RGBAf(1,1,1,1)

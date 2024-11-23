@@ -17,7 +17,8 @@ using HOHQMesh, Meshes
 """
 Redefinition, don't remember what for, but do not delete it
 """
-Base.getindex(v::Meshes.Point2, i::Int64) = v.coords[i]
+# Base.getindex(v::Meshes.Point2, i::Int64) = v.coords[i]
+Base.getindex(v::Meshes.Point, i::Int64) = v.coords[i]
 
 
 """
@@ -262,7 +263,7 @@ end
 """
   par2cart(_xi, _eta)
 
-Converts parabolic-cylindrical to cartesian coordinates.
+Converts parabolic-cylindrical to cartesian coords.
 # Arguments
 - `_xi`: PC1
 - `_eta`: PC2
@@ -276,7 +277,7 @@ end
 """
   par2cart(_xi, _eta)
 
-Converts cartesian to parabolic-cylindrical coordinates.
+Converts cartesian to parabolic-cylindrical coords.
 # Arguments
 - `x::Float64`
 - `y::Float64`

@@ -63,7 +63,7 @@ ydom = collect(LinRange(-5,5,Ny))
 
 GRID = RectilinearGrid(xdom, ydom)
 # MESH = SimpleMesh(vertices(GRID), GRID.topology)
-COORDS = coordinates.(vertices(GRID))
+COORDS = coords.(vertices(GRID))
 
 XDOM, YDOM = first.(COORDS), last.(COORDS)
 

@@ -23,7 +23,7 @@ ydom = collect(LinRange(-4,4,Ny))
 
 GRID = RectilinearGrid(xdom, ydom)
 # MESH = SimpleMesh(vertices(GRID), GRID.topology)
-COORDS = coordinates.(vertices(GRID))
+COORDS = coords.(vertices(GRID))
 
 XDOM, YDOM = map(i -> getindex.(COORDS,i), 1:2)
 

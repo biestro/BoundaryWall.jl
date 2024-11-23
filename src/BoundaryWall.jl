@@ -10,13 +10,14 @@ Copyright © 2023 - 2024 Alberto Ruiz Biestro. All rights reserved. (Will update
 
 module BoundaryWall
 
-export boundaryWallWave, boundaryWallVec, planeWave, gaussianWave, shapedWave, gradient
+export boundaryWallWave, boundaryWallVec, planeWave, gaussianWave, shapedWave, gradient, theme
 # core
 using LinearAlgebra, StaticArrays
 
 include("BWM_geometry.jl")
 include("BWM_main.jl")
 include("BWM_grids.jl")
+include("BWM_plot_utils.jl")
 
 # functions from BoundaryWall
 #

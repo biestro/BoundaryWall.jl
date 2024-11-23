@@ -83,7 +83,7 @@ using Meshes
 _points, _connec = GeometryUtils.abaqusToMeshes("./out/lattice.inp")
 
 MESH = Meshes.SimpleMesh(_points, _connec)
-COORDS = coordinates.(MESH.vertices)
+COORDS = coords.(MESH.vertices)
 XDOM, YDOM = first.(COORDS), last.(COORDS)
 
 # boundary wall

@@ -10,7 +10,7 @@ begin # definitions
 HBAR        = 1.0
 MASS        = HBAR/2
 SIGMA       = (2*MASS/HBAR^2)*(1/4*im)
-N           = 100
+N           = 500
 NDOM        = 50
 ϕ           = 135
 waveNumber  = sqrt(2.637553)
@@ -41,11 +41,8 @@ x0, xf = (-8.5, 8.5)
 y0, yf = (-7.5, 5)
 xdom = LinRange(x0, xf, NDOM)
 ydom = LinRange(y0, yf, NDOM)
-GRID = RectilinearGrid(xdom, ydom)
-MESH = SimpleMesh(vertices(GRID), GRID.topology)
-COORDS = SVector.(coordinates.(vertices(MESH)))
-
-XDOM, YDOM = first.(COORDS), last.(COORDS)
+COORDS = [(x,y) for x  in xdom, y in ydom]
+XDOM, YDOM = first.(COORDS)[:], last.(COORDS)[:]
 
 banded = 5
 
@@ -58,7 +55,7 @@ banded = 5
 # xp, yp, u, v = BoundaryWall.gradient(xdom, ydom, wave)
 
 let 
-  fig = Figure(size=(500,500))
+  fig = Figure(size=(500,500), theme=BoundaryWall.theme)
   ax = Axis(fig[1,1],
         # xtickalign=1,ytickalign=1,
         # xticksmirrored=1,yticksmirrored=1,

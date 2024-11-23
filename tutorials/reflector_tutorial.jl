@@ -3,7 +3,7 @@
 using GLMakie
 using StaticArrays: SVector
 using LinearAlgebra
-using Meshes
+
 
 using BoundaryWall
 
@@ -34,11 +34,8 @@ x0, xf = (-8, 8)
 y0, yf = (-8, 8)
 xdom = LinRange(x0, xf, NX)
 ydom = LinRange(y0, yf, NY)
-GRID = RectilinearGrid(xdom, ydom)
-MESH = SimpleMesh(vertices(GRID), GRID.topology)
-COORDS = SVector.(coordinates.(vertices(MESH)))
-
-XDOM, YDOM = first.(COORDS), last.(COORDS)
+COORDS = [(x,y) for x  in xdom, y in ydom]
+XDOM, YDOM = first.(COORDS)[:], last.(COORDS)[:]
 
 banded = 5
 
@@ -65,7 +62,7 @@ let
   ax.title = "Beam splitter simulation using negative potential"
   # viz!(ax, MESH, color=abs2.(wave), shading=NoShading, colormap=:turbo)
   # heatmap!(ax,xdom, ydom, real.(reshape(wave, NX, NY)), interpolate=true, colormap=:balance)
-  heatmap!(ax,xdom, ydom, real(reshape(wave, NX, NY)), interpolate=true, colormap=:linear_kbgyw_5_98_c62_n256)
+  heatmap!(ax,xdom, ydom, abs2.(reshape(wave, NX, NY)), interpolate=true, colormap=BoundaryWall.cmap)
 
   k = 8
   
@@ -75,7 +72,7 @@ let
   # U  = u[1:k:end, 1:k:end]
   # V  = v[1:k:end, 1:k:end]
   # arrows!(ax, Makie.Point2f.(XP, YP)[:],Makie.Point2f.(U,V)[:], normalize=true,lengthscale=1,color=(:white, 0.5))
-  [lines!(ax, createEllipse(0.0, 7.0, LinRange(-pi/2,pi/2,N), pi/4, SVector(x0, 0.0))[1:2]...,color=(:white,1.0)) for x0 in centers[1]]
+  [lines!(ax, createEllipse(0.0, 7.0, LinRange(-pi/2,pi/2,N), pi/4, SVector(x0, 0.0))[1:2]...,color=(:black,1.0)) for x0 in centers[1]]
   # [lines!(ax, createEllipse(0.0, 5.0, LinRange(-pi/2,pi/2,N), th, SVector(x0, 0.0))[1:2]..., color=:white) for (x0, th) in zip([0.0, 2.0], [pi/6, pi/4])]
   xlims!(ax, xdom[1], xdom[end])
   ylims!(ax, ydom[1], ydom[end])

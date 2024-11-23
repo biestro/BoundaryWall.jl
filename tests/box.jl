@@ -2,8 +2,8 @@
 # the same individual T-matrix. Preliminary tests btw, nothing serious
 
 using GLMakie, LinearAlgebra, StaticArrays
-include("src/BoundaryWall.jl")
-include("src/GeometryUtils.jl")
+include("../src/BoundaryWall.jl")
+include("../src/BWM_geometry.jl")
 
 using Distributions: Uniform
 
@@ -61,13 +61,13 @@ begin
   # STRENGTH[INDICES] .= rand(length(INDICES))
 
   POTENTIAL_STRENGTH = repeat(STRENGTH, inner=N)
-  CIRCLES = [GeometryUtils.createCircle(R, θ, cen) for cen in CENTERS]
+  CIRCLES = [BoundaryWall.createCircle(R, θ, SVector(cen)) for cen in CENTERS]
   x = vcat(getindex.(CIRCLES, 1)...)
   y = vcat(getindex.(CIRCLES, 2)...)
   xm= vcat(getindex.(CIRCLES, 3)...)
   ym= vcat(getindex.(CIRCLES, 4)...)
   ds= vcat(getindex.(CIRCLES, 5)...)
-  rij = GeometryUtils.calcDistances(xm,ym)
+  rij = BoundaryWall.calcDistances(xm,ym)
   fig, ax = scatter(xm, ym, color=POTENTIAL_STRENGTH, markersize=5, colormap=:viridis)
   # text!(ax, CENTERS; text=string.(eachindex(CENTERS)))
   # text!(ax, CENTERS; text=string.(STRENGTH))
@@ -139,7 +139,7 @@ xdom = LinRange(-17.0, 17.0, Nx)
 ydom = LinRange(-17.0, 17.0, Ny)
 GRID = RectilinearGrid(xdom, ydom)
 # MESH = SimpleMesh(vertices(GRID), GRID.topology)
-COORDS = coordinates.(vertices(GRID))
+COORDS = coords.(vertices(GRID))
 
 XDOM, YDOM = first.(COORDS), last.(COORDS)
 

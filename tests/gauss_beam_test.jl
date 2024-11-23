@@ -1,6 +1,6 @@
 # TODO: update boundaryWallWave to take r::Vector{SVector{2,Float64}} instead of two vectors x,y
 
-using GLMakie
+using GLMakie; GLMakie.activate!(float=true)
 using StaticArrays: SVector
 using LinearAlgebra
 using Meshes
@@ -41,7 +41,7 @@ xdom = LinRange(x0, xf, NX)
 ydom = LinRange(y0, yf, NY)
 GRID = RectilinearGrid(xdom, ydom)
 MESH = SimpleMesh(vertices(GRID), GRID.topology)
-COORDS = SVector.(coordinates.(vertices(MESH)))
+COORDS = SVector.(coords.(vertices(MESH)))
 
 XDOM, YDOM = first.(COORDS), last.(COORDS)
 
@@ -69,7 +69,7 @@ let
         )
   # ax.title = "Band integrated |i - j|<$banded"
   # viz!(ax, MESH, color=abs2.(wave), shading=NoShading, colormap=:turbo)
-  heatmap!(ax,xdom, ydom, imag.(reshape(wave, NX, NY)), interpolate=true, colormap=:cubehelix)
+  heatmap!(ax,xdom, ydom, imag.(reshape(wave, NX, NY)), interpolate=true, colormap=:balance)
   # heatmap!(ax,xdom, ydom, real.(reshape(wave, NX, NY)), interpolate=false, colormap=:linear_kbgyw_5_98_c62_n256)
 
   k = 8

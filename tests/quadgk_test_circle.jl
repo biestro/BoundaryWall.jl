@@ -56,15 +56,15 @@ heatmap( circshift(abs2.(T),( N÷2, N÷2)), colorscale=log10, colormap=:grayC)
 Nx, Ny = 150,150
 
 MESH = GeometryUtils.confocalBilliardMesh(1.0, 2.0/3.0, 20, Nx, Ny)
-Z    = coordinates.(MESH.vertices)
+Z    = coords.(MESH.vertices)
 XDOM, YDOM = first.(Z), last.(Z)
 
 xdom = LinRange(floor(minimum(x))-1.2,ceil(maximum(x))+1.2, Nx)
 ydom = LinRange(floor(minimum(y))-1.2,ceil(maximum(y))+1.2, Ny)
 MESH = RectilinearGrid(xdom, ydom)
 MESH = SimpleMesh(vertices(MESH), MESH.topology)
-# COORDS = coordinates.(centroid.(MESH))
-COORDS = coordinates.(MESH.vertices)
+# COORDS = coords.(centroid.(MESH))
+COORDS = coords.(MESH.vertices)
 
 XDOM, YDOM = first.(COORDS), last.(COORDS)
 

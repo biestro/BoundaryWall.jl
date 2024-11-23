@@ -125,14 +125,16 @@ function calcTPHI(Mij::Matrix{ComplexF64}, waveAtBoundary::Vector{ComplexF64}, g
     println("Using infinite approximation...")
     return -Mij\waveAtBoundary
   end
-  return gamma *  solve(LinearProblem(LinearAlgebra.I(size(Mij, 1)) .- gamma * Mij, waveAtBoundary))
+  # return gamma *  solve(LinearProblem(LinearAlgebra.I(size(Mij, 1)) .- gamma * Mij, waveAtBoundary)) # for some reason this does not work anymore
+  return gamma * ((LinearAlgebra.I(size(Mij, 1)) .- gamma * Mij)\waveAtBoundary)
 end
 
 # could, in principle, replace it with the method above
 function calcTPHI(Mij::Matrix{ComplexF64}, waveAtBoundary::Vector{ComplexF64}, gamma::Vector)
   # -solve(LinearProblem(Mij, waveAtBoundary),KrylovJL_GMRES())
  
-  return gamma .*  solve(LinearProblem(LinearAlgebra.I(size(Mij, 1)) .- gamma .* Mij, waveAtBoundary))
+  # return gamma .*  solve(LinearProblem(LinearAlgebra.I(size(Mij, 1)) .- gamma .* Mij, waveAtBoundary))
+  return gamma .* ((LinearAlgebra.I(size(Mij, 1)) .- gamma .* Mij)\ waveAtBoundary)
 end
 
 
@@ -1183,7 +1185,8 @@ greensTensor = [I(numSegments) - γ*_g[1] -γ*_g[2] -γ*_g[3];
 
 # greensTensor = [Mxx Mxy zero(Mzz); Mxy Myy zero(Mzz); zero(Mxx) zero(Myy) Mzz] # ./ arcLengths[1] # normalization stuff
 println("Solving system of equations")
-TPHI = γ * solve(LinearProblem(greensTensor, [waveAtBoundaryX; waveAtBoundaryY; waveAtBoundaryZ])).u
+# TPHI = γ * solve(LinearProblem(greensTensor, [waveAtBoundaryX; waveAtBoundaryY; waveAtBoundaryZ])).u
+TPHI = γ * solve((greensTensor\ [waveAtBoundaryX; waveAtBoundaryY; waveAtBoundaryZ]))
 
 TPHI_X = TPHI[1:numSegments]
 TPHI_Y = TPHI[numSegments+1:2numSegments]

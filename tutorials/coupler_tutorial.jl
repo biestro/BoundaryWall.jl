@@ -37,11 +37,8 @@ x0, xf = (-8, 8)
 y0, yf = (-8, 8)
 xdom = LinRange(x0, xf, NX)
 ydom = LinRange(y0, yf, NY)
-GRID = RectilinearGrid(xdom, ydom)
-MESH = SimpleMesh(vertices(GRID), GRID.topology)
-COORDS = SVector.(coordinates.(vertices(MESH)))
-
-XDOM, YDOM = first.(COORDS), last.(COORDS)
+COORDS = [(x,y) for x  in xdom, y in ydom]
+XDOM, YDOM = first.(COORDS)[:], last.(COORDS)[:]
 
 banded = 5
 
@@ -63,8 +60,8 @@ function plotFieldDensity(f::Vector{Float64}, xdom, ydom, cmap)
         xgridvisible=false, ygridvisible=false,
         # xticklabelsvisible=false,yticklabelsvisible=false,
         xminorticksvisible=true,yminorticksvisible=true,
-        xminortickalign=1,
-        yminortickalign=1,
+        xminortickalign=0,
+        yminortickalign=0,
         xminorticks=IntervalsBetween(2),
         yminorticks=IntervalsBetween(2),
         )

@@ -182,16 +182,16 @@ xdom = LinRange(x0, xf, nx)
 ydom = LinRange(y0, yf, ny)
 GRID = RectilinearGrid(xdom, ydom)
 MESH = SimpleMesh(vertices(GRID), GRID.topology)
-COORDS = SVector.(coordinates.(vertices(MESH)))
+COORDS = SVector.(coords.(vertices(MESH)))
 XDOM = BigFloat.(first.(COORDS))
 YDOM = BigFloat.(last.(COORDS))
 end
 
 begin
-COORDS = coordinates.(MESH.vertices)
+COORDS = coords.(MESH.vertices)
 # XDOM, YDOM = first.(COORDS), last.(COORDS)
 MESH_ROT = MESH |> Rotate(Meshes.Angle2d(pi/4))
-COORDS_ROT = coordinates.(MESH_ROT.vertices)
+COORDS_ROT = coords.(MESH_ROT.vertices)
 # XROT, YROT = first.(COORDS_), last.(COORDS)
 end
 

@@ -31,7 +31,7 @@ xdom = LinRange(x0, xf, nx)
 ydom = LinRange(y0, yf, ny)
 GRID = RectilinearGrid(xdom, ydom)
 MESH = SimpleMesh(vertices(GRID), GRID.topology)
-COORDS = SVector.(coordinates.(vertices(MESH)))
+COORDS = SVector.(coords.(vertices(MESH)))
 
 XDOM, YDOM = first.(COORDS), last.(COORDS)
 end

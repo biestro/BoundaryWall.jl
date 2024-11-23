@@ -48,8 +48,8 @@ xdom = LinRange(floor(minimum(x))-1,ceil(maximum(x))+1, Nx)
 ydom = LinRange(floor(minimum(y))-1,ceil(maximum(y))+1, Ny)
 MESH = RectilinearGrid(xdom, ydom)
 MESH = SimpleMesh(vertices(MESH), MESH.topology)
-# COORDS = coordinates.(centroid.(MESH))
-COORDS = coordinates.(MESH.vertices)
+# COORDS = coords.(centroid.(MESH))
+COORDS = coords.(MESH.vertices)
 XDOM, YDOM = first.(COORDS), last.(COORDS)
 
 
@@ -87,7 +87,7 @@ banded = round(Int, size(rij,1) * 5/100)
 
 _abaqus_mesh = GeometryUtils.circularLatticeMesh(centers_3d, R, x, y, (100,100))
 
-_coords = coordinates.(_abaqus_mesh.vertices)
+_coords = coords.(_abaqus_mesh.vertices)
 _x, _y = first.(_coords), last.(_coords)
 
 @time wave_band_mesh = BoundaryWall.boundaryWallWave(waveVector, x, y, xm, ym, _x, _y, σ, ds, rij, length(ds), N, banded, Inf);

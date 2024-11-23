@@ -43,8 +43,8 @@ xdom = LinRange(floor(minimum(x))-1,ceil(maximum(x))+1, Nx)
 ydom = LinRange(floor(minimum(y))-1,ceil(maximum(y))+1, Ny)
 MESH = RectilinearGrid(xdom, ydom)
 MESH = SimpleMesh(vertices(MESH), MESH.topology)
-# COORDS = coordinates.(centroid.(MESH))
-COORDS = coordinates.(MESH.vertices)
+# COORDS = coords.(centroid.(MESH))
+COORDS = coords.(MESH.vertices)
 XDOM, YDOM = first.(COORDS), last.(COORDS)
 
 
