@@ -1300,4 +1300,28 @@ function gradient(xdom::LinRange, ydom::LinRange, z::Vector{ComplexF64})
   return xs, ys, us, vs
 end
 
+"""
+My own gradient function for 2d rectangular meshes.
+
+In principle, the gradient can be calculated using the BWM, but it deals with hankel
+functions of order 1, which have bad convergence.
+"""
+function gradient(xdom::LinRange, ydom::LinRange, z::Union{Matrix{ComplexF64}, Matrix{Float64}})
+  @assert length(z)==length(xdom)*length(ydom) "Array's length don't match"
+  
+  ms = [SVector(x,y) for x in xdom, y in ydom]
+  itp = linear_interpolation((xdom,ydom),reshape(z,length(xdom), length(ydom)))
+  grad = [Interpolations.gradient(itp, idx...) for idx in knots(itp)]
+  dv       = imag( conj(reshape(z, length(xdom), length(ydom))) .* grad )
+  strength = vec(@. sqrt(first(dv) ^ 2 + last(dv)^ 2))
+  
+  xs = first.(ms)
+  ys = last.(ms)
+  
+  us = first.(dv)
+  vs = last.(dv)
+  
+  return xs, ys, us, vs
+end
+
 # end

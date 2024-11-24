@@ -154,3 +154,42 @@ begin
   save("crystal.svg", fig, px_per_unit=3)
   fig
 end
+
+# see the multiplexer path
+waves = [
+  BWM.boundaryWallWave(FREQS[1] * KVEC, (k,r)->BWM.gaussianWave(k,r - SVector(-10.25, 0.0), 4.0; abstol=1e-3), x, y, xm, ym, XDOM, YDOM, SIGMA, ds, rij, length(ds), N, BANDED, POTENTIAL_STRENGTH),
+  BWM.boundaryWallWave(FREQS[2] * KVEC, (k,r)->BWM.gaussianWave(k,r - SVector(-10.25, 0.0), 4.0; abstol=1e-3), x, y, xm, ym, XDOM, YDOM, SIGMA, ds, rij, length(ds), N, BANDED, POTENTIAL_STRENGTH)
+]
+begin
+fig = Figure(theme=BWM.theme, size=(500, 700))
+gl = fig[1,1] = GridLayout()
+for (j,w) in enumerate(waves)
+    
+  xp, yp, u, v = BWM.gradient(xdom, ydom, w)
+  wave_reshaped = reshape(w, length(xdom), length(ydom))
+
+  k = 2
+  XP = xp[1:k:end, 1:k:end]
+  YP = yp[1:k:end, 1:k:end]
+  U  = u[1:k:end, 1:k:end]
+  V  = v[1:k:end, 1:k:end]
+  C  = abs2.(wave_reshaped)[1:k:end, 1:k:end]
+
+  # C = angle.(wave)[1:k:end, 1:k:end]
+  # ax = Axis(fig[1,1])
+  ax,_=arrows(gl[j,1], Makie.Point2f.(XP, YP)[:],Makie.Point2f.(U,V)[:], normalize=true,arrowsize = 6, align=:center,lengthscale=0.5,color=C[:], colormap=BWM.cmap, )
+  # heatmap!(ax, xdom, ydom, angle.(wave_reshaped), colormap=:twilight)
+  for cen in CENTERS; 
+    circ = BWM.createCircle(R, θ, SVector(cen));  
+    lines!(ax, circ[1], circ[2], linestyle=:solid)
+  end
+  ax.aspect=DataAspect()
+  # text!(ax, -15.0, 9.0; text=L"\omega=%$(FREQS[j])")
+  Label(gl[j,0], L"\omega=%$(FREQS[j])", tellheight=false)
+  hidedecorations!(ax, ticks=false, minorticks=false)
+
+end
+save("crystal_arrows.svg", fig)
+fig
+
+end
