@@ -39,7 +39,7 @@ using BoundaryWall
 
 ## Documentation
 
-Tutorials and documentation can be found in [biestro.github.io/software](www.biestro.github.io/software)
+Tutorials and documentation can be found in [biestro.github.io/software](https://biestro.github.io/software)
 
 
 # TODO
