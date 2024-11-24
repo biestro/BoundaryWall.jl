@@ -1,7 +1,8 @@
 using LinearAlgebra
-using StaticArrays: SVector, SizedMatrix
+using StaticArrays: SVector
 using SpecialFunctions
-using GLMakie; GLMakie.activate!(inline=false, float=true)
+# using GLMakie; GLMakie.activate!(inline=false, float=true)
+using CairoMakie
 import BoundaryWall as BWM
 
 begin # CONSTANTS
@@ -10,14 +11,17 @@ begin # CONSTANTS
   MASS = 0.5
   HBAR = 1.0
   SIGMA= (2*MASS/HBAR^2)*(1/4*im)
-  NDOM = 70
+  NDOM = 100
   zero = 13.3237
   R    = 1.0
   θ    = LinRange(0, 2pi, N+1)
   TH   = 180                  # incident angle
   # KVEC = zero/R * SVector(cosd(TH), sind(TH))
   KVEC = SVector(cosd(TH), sind(TH))
-  FREQ = 1.0
+  POTENTIAL_STRENGTH = -100.0
+  BANDED = 3
+
+
   # circle 1
 end
 
@@ -25,17 +29,17 @@ begin
   # WINDOW = 5.0
   # GAMMA_MAX = 30.0
     # show model
-  STEP = 2.5R + R/2 # diameter  + constant
-  N_CIRCLES = 7
-  RANGES = -(N_CIRCLES-1)*STEP/2:STEP:(N_CIRCLES-1)*STEP/2
+  STEP = 2.0R + R/2 # diameter  + constant
+  N_CIRCLES = (10,7)
+  RANGES = [-(N_CIRCLES[1]-1)*STEP/2:STEP:(N_CIRCLES[1]-1)*STEP/2,-(N_CIRCLES[2]-1)*STEP/2:STEP:(N_CIRCLES[2]-1)*STEP/2]
   N_STEPS =length(RANGES)
-  CENTERS = vec([(i, j) for i in RANGES, j in RANGES])
+  CENTERS = vec([(i, j) for i in RANGES[1], j in RANGES[2]])
 
-  CENTERS  = vec([(i, j) for i in RANGES, j in RANGES])
-  STRENGTH = ones(length(RANGES), length(RANGES));
-  reverse!(STRENGTH, dims=1)
+  # CENTERS  = vec([(i, j) for i in RANGES, j in RANGES])
+  # STRENGTH = ones(length(RANGES), length(RANGES));
+  # reverse!(STRENGTH, dims=1)
   #STRENGTH=STRENGTH[:] .* 10.0e10
-  STRENGTH=STRENGTH[:]
+  # STRENGTH=STRENGTH[:]
   # INDICES  = sort([N_STEPS-5,
   #                 2N_STEPS-5,
   #                 3N_STEPS-5,
@@ -50,10 +54,11 @@ begin
 
 
   # STRENGTH[INDICES] .= rand(length(INDICES))
-  INDICES = sort([22, 23, 24, 25, 26, 33, 34, 35, 19, 20,21])
+  INDICES = sort([31,32,33,43,44,45,46,47,48,38,39, 40, 23, 24, 25, 26, 27, 28])
+  
   deleteat!(CENTERS, INDICES)
 
-  POTENTIAL_STRENGTH = repeat(STRENGTH, inner=N)
+  # POTENTIAL_STRENGTH = repeat(STRENGTH, inner=N)
   CIRCLES = [BWM.createCircle(R, θ, SVector(cen)) for cen in CENTERS]
   x = vcat(getindex.(CIRCLES, 1)...)
   y = vcat(getindex.(CIRCLES, 2)...)
@@ -63,181 +68,89 @@ begin
   rij = BWM.calcDistances(xm,ym)
   fig = Figure(theme=BWM.theme)
   ax = Axis(fig[1,1])
-  scatter!(ax,xm, ym, markersize=5)
-  text!(ax, CENTERS; text=string.(eachindex(CENTERS)))
-  # text!(ax, CENTERS; text=string.(STRENGTH))
-  inset_ax = Axis(fig[1, 1],
-                  width=Relative(0.1),
-                  height=Relative(0.1),
-                  halign=0.0,
-                  valign=1.0,
-                  backgroundcolor=:snow2,
-                  # xautolimitmargin = (0.2, 0.2),
-                  # yautolimitmargin = (0.2, 0.2),
-  )
-  # inset_ax.aspect = DataAspect()
-  inset_ax.limits=(-1,1,-1,1)
-  hidedecorations!(inset_ax)
-  # hidedecorations!(inset_ax)
-  translate!(inset_ax.scene, 0, 0, 10)
-  # translate!(inset_ax.elements[:background], 0, 0, 9)
-  arrows!(inset_ax,[cosd(TH)/2],[sind(TH)/2], [-cosd(TH)],[-sind(TH)], align=:origin)
-  
 
+  for cen in CENTERS
+    circ = BWM.createCircle(R, θ, SVector(cen))
+  # [scatter!(ax, BWM.createCircle(R, θ, SVector(cen))) for cen in CENTERS]
+  lines!(ax, circ[1], circ[2], linestyle=:solid)
+  end
+  text!(ax, CENTERS; text=string.(eachindex(CENTERS)))
+  arrows!(ax,[-12.0],[0.0], [-cosd(TH)],[-sind(TH)], align=:origin)
   ax.aspect=DataAspect()
-  inset_ax.aspect=(DataAspect())
+  # save("docs/src/assets/photonic_diagram.png", fig)
+  save("docs/src/assets/photonic_diagram.svg", fig)
   fig
 end
 
 
 
 # domain
-x0, xf = (-11., 11.)
-y0, yf = (-11.,11.)
+x0, xf = (-15.,15.)
+y0, yf = (-10.,10.)
 xdom = LinRange(x0, xf, NDOM)
 ydom = LinRange(y0, yf, NDOM)
-COORDS = [(x,y) for x  in xdom, y in ydom]
+COORDS = [(_x,_y) for _x in xdom, _y in ydom]
 XDOM, YDOM = first.(COORDS)[:], last.(COORDS)[:]
 
-begin
-
-  @inline function wave_function(_freq::Float64, _kvec::SVector{2, Float64}, _width::Float64)
-    return reshape(
-      BWM.boundaryWallWave(_freq * _kvec, (k,r)->BWM.gaussianWave(k,r - SVector(-10.0, 0.0), _width; abstol=1e-3), x, y, xm, ym, XDOM, YDOM, SIGMA, ds, rij, length(ds), N, banded, POTENTIAL_STRENGTH),
-      NDOM, NDOM
+@inline function wave_function(_freq::Float64, _kvec::SVector{2, Float64}, _width::Float64)
+  return abs2.(reshape(
+    BWM.boundaryWallWave(_freq * _kvec, (k,r)->BWM.gaussianWave(k,r - SVector(-10.25, 0.0), _width; abstol=1e-3), x, y, xm, ym, XDOM, YDOM, SIGMA, ds, rij, length(ds), N, BANDED, POTENTIAL_STRENGTH),
+    NDOM, NDOM
     )
-  end
+  )
+end
+FREQS = [1.35, 1.55, 1.65]
+
+waves = [wave_function(f, KVEC, 4.0) for f in FREQS]
+idx_sensor = NDOM - 3
   
-  POTENTIAL_STRENGTH = -5.0
-  DELTA_FREQ         = 0.02
-  DELTA_WIDTH        = 0.1
-  DELTA_ANGLE        = 15 # degrees
-  TH   = 180               
-  MAX_FREQ           = 1.2
+begin
+  fig = Figure(theme=BWM.theme, size=(600,600))
+  gl = fig[1,1] = GridLayout()
+  COLOR_RANGE = (0,maximum([maximum(w) for w in waves]))
 
-  frequency_obs = Observable(1.0)
-  width_obs     = Observable(2.0)
-  frequency_str = Observable("Freq: $(round(frequency_obs.val, digits=3))")
-  theta_obs = Observable(TH)
-  angle_obs = Observable(SVector(cosd(theta_obs[]), sind(theta_obs[])))
-  angle_str = Observable("Angle: $(round(theta_obs.val, digits=3))")
+  ax_l = Makie.Axis[]
+  ax_r = Makie.Axis[]
+  for (i,w) in enumerate(waves)
+    ax1,hm = heatmap(gl[i,1], xdom, ydom, w, colormap=BWM.cmap, colorrange=COLOR_RANGE)
+    ax2,_=lines(gl[i,2], w[idx_sensor,:], ydom, color=:blue)
+    append!(ax_l, [ax1])
+    append!(ax_r, [ax2])
+    ax1.xautolimitmargin = (0.05f0, 0.05f0)
+    ax1.yautolimitmargin = (0.05f0, 0.05f0)
 
-  # arrow     = Observable([[Point2f(1,1)], [Point2f(2,2)]])
-  # point1y   = Observable(sind(theta_obs[])/2)
-  # KVEC = zero/R * SVector(cosd(TH), sind(TH))
-  # KVEC = SVector(cosd(TH), sind(TH))
-  banded = 3
-  fig = Figure(theme=BWM.theme)
+    ax1.aspect=DataAspect()
+    xlims!(ax2, -10, 100.0)
+   
+    # draw circles
+    for cen in CENTERS; 
+      circ = BWM.createCircle(R, θ, SVector(cen));  
+      lines!(ax1, circ[1], circ[2], linestyle=:solid)
+    end
 
-  wave = Observable(
-          abs2.(
-            # BWM.boundaryWallWave(frequency_obs[] * KVEC, (k,r)->BWM.gaussianWave(k,r - SVector(-10.0, 0.0), width_obs[]; abstol=1e-3), x, y, xm, ym, XDOM, YDOM, SIGMA, ds, rij, length(ds), N, banded, -3.0);
-            wave_function(frequency_obs[], angle_obs[], width_obs[])
-          )
-        )
-  wave_end = Observable(wave[][end,:])
+    # sensor
+    lines!(ax1, [xdom[idx_sensor], xdom[idx_sensor]], [ydom[1], ydom[end]], color=:blue, linestyle=:dash)
+  end
+  colgap!(gl, 10)
 
+  [hidexdecorations!(ax, ticks=false, minorticks=false) for ax in ax_l[1:2]]
+  [hidexdecorations!(ax, ticks=false, minorticks=false) for ax in ax_r[1:2]]
+  [hideydecorations!(ax, ticks=false, minorticks=false) for ax in ax_r]
+  # [ax.yaxisposition = :right for ax in ax_r]
+  [ax.yticksmirrored = true for ax in ax_r]
+  ax_l[1].title="Density"
+  ax_r[1].title="Sensor readout"
+  ax_l[3].xlabel="x"
+  ax_r[3].xlabel="ΨΨ*"
+  # colgap!(fig.layout, Relative(0.02))
+  # rowsize!(fig.layout,1, Aspect(1, 1.))
+  colsize!(gl,1, Aspect(1, 1.8))
+  Colorbar(fig[1,2], label="|Ψ|²", labelrotation=0, colorrange=COLOR_RANGE, colormap=BWM.cmap, ticks=(collect(COLOR_RANGE), ["min", "max"]))
 
-  ax = Axis(fig[1,1])
-  ax.aspect=DataAspect()
-  # viz!(ax, MESH, color=wave, colormap=:linear_kbgyw_5_98_c62_n256) #:linear_protanopic_deuteranopic_kbw_5_98_c40_n256
-  # viz!(ax, MESH, color=wave, colormap=:linear_protanopic_deuteranopic_kbw_5_98_c40_n256)
-
-  heatmap!(ax, xdom, ydom, wave, colormap=BWM.cmap)
   # ax2 = Axis(fig[1,2], tellwidth=true)
   # heatmap!(ax, XDOM, YDOM, abs2.(reshape))
-  scatter!(ax, x,y,color=:black, markersize=5)
+  # scatter!(ax, x,y,color=:black, markersize=5)
 
-
-  fig[2, 1] = buttongrid = GridLayout(tellwidth = false)
-  buttons = buttongrid[1, 1:4] = [Button(fig,label="+ f"), Button(fig, label="- f"),Button(fig,label="+ θ"), Button(fig, label="- θ") ]
-
-
-  gl_labels = fig[0,1] = GridLayout()
-  # gl_output = fig[1,2] = GridLayout(tellheight=false)
-  ax2 = Axis(fig[1,2])
-  lines!(ax2,  wave_end, ydom)
-  ax2.yticklabelsvisible=false
-  # ax2.aspect=DataAspect()
-  # ax2.aspect=(2,1)
-  colsize!(fig.layout, 1, Aspect(2, 10.0))
-  # ax_arrow,_ = arrows(gl_labels[1,1], arrow, align=:origin)
-  # ax_arrow.aspect=DataAspect()
-  # ax_arrow.limits=(-1,1,-1,1)
-
-  # hidedecorations!(ax_arrow)
-
-
-  Label(gl_labels[1,1], frequency_str, font = :italic, tellheight=true, tellwidth=false)
-  Label(gl_labels[1,2], angle_str, font = :italic, tellheight=true, tellwidth=false)
-
-  on(buttons[1].clicks) do _
-    if abs(frequency_obs[]) <= MAX_FREQ
-    frequency_obs[] += DELTA_FREQ
-    end
-    frequency_str[] = "Freq: $(round(frequency_obs.val, digits=3))"
-    wave[] = abs2.(
-      wave_function(frequency_obs[], angle_obs[], width_obs[])
-    )
-    wave_end[] = wave[][end,:]
-    # end
-    # return "frequency_obs[]"
-  end
-
-  # Label(gl_labels[2,1], "titleposition = :top\norientation = :vertical\nnbanks = 2", font = :italic, tellheight=false)
-
-  on(buttons[2].clicks) do _
-    if frequency_obs[] >= 0.0 # MIN FREQ
-    frequency_obs[] -=  DELTA_FREQ
-    end
-    frequency_str[] = "Freq: $(round(frequency_obs.val, digits=3))"
-
-    wave[] = abs2.(
-            wave_function(frequency_obs[], angle_obs[], width_obs[])
-    )
-    wave_end[] = wave[][end,:]
-
-
-
-  end
-
-
-  on(buttons[3].clicks) do _
-    # width_obs[] +=  DELTA_WIDTH
-    theta_obs[] += DELTA_ANGLE
-    angle_obs[] = SVector(cosd(theta_obs[]),sind(theta_obs[]))
-    angle_str[] = "Angle: $(round(theta_obs[], digits=3) % 360.0)"
-    wave[] = abs2.(
-            wave_function(frequency_obs[], angle_obs[], width_obs[])
-    )
-    wave_end[] = wave[][end,:]
-
-  end
-
-  on(buttons[4].clicks) do _
-
-    theta_obs[] -= DELTA_ANGLE
-
-    angle_obs[] = SVector(cosd(theta_obs[]),sind(theta_obs[]))
-    angle_str[] = "Angle: $(round(theta_obs[], digits=3) % 360.0)"
-
-    
-    wave[] = abs2.(
-            wave_function(frequency_obs[], angle_obs[], width_obs[])
-    )
-    # println(width_obs[])
-    wave_end[] = wave[][end,:]
-
-  end
-
-
-  # sliderobservables = [s.value for s in sg.sliders]
-  # _ = lift(sliderobservables...) do slvalues...
-  #   _freq, _theta = slvalues
-  #   wave[] = real(
-  #           BWM.boundaryWallWave(_freq * KVEC, (k,r)->BWM.gaussianWave(k,r - SVector(-10.0, 0.0), 3.0; abstol=1e-3), x, y, xm, ym, XDOM, YDOM, SIGMA, ds, rij, length(ds), N, banded, -3.0);
-  #   )
-  # end
-
+  save("crystal.pdf", fig, px_per_unit=3)
   fig
 end
