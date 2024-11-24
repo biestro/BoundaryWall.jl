@@ -120,7 +120,7 @@ begin
     ax1.yautolimitmargin = (0.05f0, 0.05f0)
 
     ax1.aspect=DataAspect()
-    xlims!(ax2, -10, 100.0)
+    xlims!(ax2, -10, 50.0)
    
     # draw circles
     for cen in CENTERS; 
@@ -144,13 +144,13 @@ begin
   ax_r[3].xlabel="ΨΨ*"
   # colgap!(fig.layout, Relative(0.02))
   # rowsize!(fig.layout,1, Aspect(1, 1.))
-  colsize!(gl,1, Aspect(1, 1.8))
+  colsize!(gl,1, Aspect(1, 1.5))
   Colorbar(fig[1,2], label="|Ψ|²", labelrotation=0, colorrange=COLOR_RANGE, colormap=BWM.cmap, ticks=(collect(COLOR_RANGE), ["min", "max"]))
 
   # ax2 = Axis(fig[1,2], tellwidth=true)
   # heatmap!(ax, XDOM, YDOM, abs2.(reshape))
   # scatter!(ax, x,y,color=:black, markersize=5)
 
-  save("crystal.pdf", fig, px_per_unit=3)
+  save("crystal.svg", fig, px_per_unit=3)
   fig
 end
