@@ -1,6 +1,5 @@
 using StatsBase: sample
 using GLMakie  
-using Meshes: RectilinearGrid, coordinates, SimpleMesh, vertices, viz!
 using StaticArrays
 using LinearAlgebra: diagind
 
@@ -59,6 +58,9 @@ begin
 
   @time wave = boundaryWallWave(waveVector, planeWave, x, y, xm, ym, XDOM, YDOM, σ, ds, rij, length(ds), N, banded, -10.0);
 end
+
+
+
 let
   fig = Figure()
   ax  = Axis(fig[1,1], title="Lattice without defects")

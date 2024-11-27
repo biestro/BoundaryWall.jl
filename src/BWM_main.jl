@@ -74,6 +74,9 @@ gaussianWave(k::SVector{2, Float64}, r::SVector{2, Float64}, ω::Float64; abstol
 """Vaishnav et al. (2007). Matter-wave scattering and guiding by atomic arrays. PRA, doi:10.1103/physreva.76.013620"""
 shapedWave(k::SVector{2, Float64}, r::SVector{2, Float64}, ω::Float64; abstol=0) = 1/2pi * first(hquadrature(t -> exp(-((t-atan(k))/ω)^2) * planeWave(norm(k)*SVector(cos(t),sin(t)),r), -pi/2+atan(k), pi/2+atan(k); atol=abstol))
 
+"""Bessel wave"""
+besselWave(k::Float64, r::Float64, n::Int64) = complex(besselj(n,k*r))
+
 
 # function heavyside(x::Float64, xp::Float64)
 #   return sign(x-xp)
