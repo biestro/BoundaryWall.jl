@@ -1,4 +1,5 @@
 using Makie
+using DelimitedFiles
 
 
 """
@@ -97,3 +98,23 @@ cmap[1] = RGBAf(1,1,1,1)
 
 cmap_inv = Reverse(cmap)
 # cmap = Makie.to_colormap(Reverse(:linear_kbgyw_5_98_c62_n256))
+
+"""
+  rewrites data from a vector of x,y,z data into one acceptable for 
+  pm3d in gnuplot. 
+  It must have the first column as the variable that states the row 
+  break.
+"""
+function pm3d_fix(_filename::String, _data::Vector)
+    x,y,z = getindex.(_data,1),getindex.(_data,2),getindex.(_data,3)
+    open(_filename, "w") do io
+    last=x[firstindex(x)]
+    for index in eachindex(x)
+      if last != x[index]
+        writedlm(io," ")
+      end
+      writedlm(io, [x[index] y[index] z[index]])
+      last=x[index]
+    end
+  end
+end

@@ -108,6 +108,8 @@ function calcMmatrix(waveNumber::Float64,
                      arcLengths::Vector,
                      dindex::StepRange)
 
+  @warn "Deprecated in favour of banded approach (see other methods)"
+
   Mij          = @. σ * calcGreenFun(waveNumber, rijMid) * arcLengths[1] #  arcLengths # multiplies cols by ds[j]
   Mij[dindex] .= @. σ * calcGreenFun(waveNumber, arcLengths/2) * arcLengths[1] # arcLengths;
   return Mij

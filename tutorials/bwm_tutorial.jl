@@ -11,9 +11,9 @@ HBAR        = 1.0
 MASS        = HBAR/2
 SIGMA       = (2*MASS/HBAR^2)*(1/4*im)
 N           = 500
-NDOM        = 50
+NDOM        = 150
 ϕ           = 135
-waveNumber  = sqrt(2.637553)
+waveNumber  = sqrt(2.064)
 waveVector  = waveNumber*SVector(cosd(ϕ), sind(ϕ)) # parabolic billiard eigenstate
 end
 ################################################################################
@@ -41,21 +41,36 @@ x0, xf = (-8.5, 8.5)
 y0, yf = (-7.5, 5)
 xdom = LinRange(x0, xf, NDOM)
 ydom = LinRange(y0, yf, NDOM)
-COORDS = [(x,y) for x  in xdom, y in ydom]
+COORDS = [(x,y) for y  in ydom, x in xdom]
 XDOM, YDOM = first.(COORDS)[:], last.(COORDS)[:]
 
-banded = 5
+banded = 2
 
 @time wave = BWM.boundaryWallWave(waveVector, (k,r)->BWM.planeWave(k,r), x, y, xm, ym, XDOM, YDOM, SIGMA, arc_lengths, distance_matrix, length(arc_lengths), N, banded, Inf);
-
+rMid = SVector.(xm, ym)
+rPos = CircularArray(SVector.(x, y)[1:end])
+@time tmat = inv(BWM.calcMmatrix(waveNumber, SIGMA, distance_matrix,arc_lengths, banded, rMid,rPos,N))
 # for j in 1:N
 
+
+
+using DelimitedFiles
+wave_reshaped = SVector.(XDOM, YDOM,(abs2.(wave)))
+wave_angle    = SVector.(XDOM,YDOM, angle.(wave))
+wave_tmat     = SVector.(XDOM,YDOM, angle.(wave))
 # end
+writedlm("data/wave_parabolic_k=$waveNumber.txt", wave_reshaped)
+writedlm("data/angle_parabolic_k=$waveNumber.txt", wave_angle)
+writedlm("data/tmat_parabolic_k=$waveNumber.txt", abs.(tmat))
+writedlm("data/billiard.txt", rPos)
+
+BWM.pm3d_fix("data/wave_parabolic_k=$waveNumber.txt", wave_reshaped)
+BWM.pm3d_fix("data/angle_parabolic_k=$waveNumber.txt", wave_angle)
 
 # xp, yp, u, v = BoundaryWall.gradient(xdom, ydom, wave)
 
 let 
-  fig = Figure(size=(500,500), theme=BoundaryWall.theme)
+  fig = Figure(size=(500,500), theme=BWM.theme)
   ax = Axis(fig[1,1],
         # xtickalign=1,ytickalign=1,
         # xticksmirrored=1,yticksmirrored=1,
