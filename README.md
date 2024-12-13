@@ -10,8 +10,8 @@ calculating the scattering of arbitrary boundaries, based upon the work of
 written in pure Julia.
 
 The design of this project was motivated for calculating eigenstates 
-and scattering wavefunctions in billiards ([F.M. Zanetti et al.](https://doi.org/10.1016/j.aop.2008.01.008), 
-[A. Ruiz-Biestro et al.](https://doi.org/10.1103/PhysRevE.109.034203)).
+and scattering wavefunctions in billiards (see [F.M. Zanetti et al.](https://doi.org/10.1016/j.aop.2008.01.008) for original algorithm, our work in 
+[A. Ruiz-Biestro, JC Gutiérrez-Vega](https://doi.org/10.1103/PhysRevE.109.034203)).
 
 This raises an important detail about possible applications. This is a **Boundary Integral Method**,
 which limits the applicable domains to 2D curves consisting of: [simply 

@@ -1,6 +1,5 @@
 """
 Developed by Alberto RB for use in Billiard problems.
-If you use this, thank me at least!!
 
 Geometry utils for creating billiards, meshes, and more.
 """
