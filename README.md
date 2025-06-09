@@ -1,6 +1,6 @@
 # BoundaryWall.jl
 
-Simple toolbox that implements an integral method for solving for an incident (TM) wave with well behaved scatterers.
+Simple toolbox that implements an integral method for solving for an incident (TM) wave with well behaved scatterers. Documentation (some of it at least) available at [https://biestro.github.io/posts/boundary-wall/](https://biestro.github.io/posts/boundary-wall/).
 
 ## Overview
 
