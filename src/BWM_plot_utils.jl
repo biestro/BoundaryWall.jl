@@ -96,6 +96,8 @@ colors = Makie.wong_colors()
 cmap = Makie.to_colormap(Reverse(:linear_protanopic_deuteranopic_kbw_5_98_c40_n256))
 cmap[1] = RGBAf(1,1,1,1)
 
+# cmap =
+
 cmap_inv = Reverse(cmap)
 # cmap = Makie.to_colormap(Reverse(:linear_kbgyw_5_98_c62_n256))
 

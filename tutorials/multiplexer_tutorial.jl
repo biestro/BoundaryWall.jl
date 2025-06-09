@@ -11,7 +11,7 @@ begin # CONSTANTS
   MASS = 0.5
   HBAR = 1.0
   SIGMA= (2*MASS/HBAR^2)*(1/4*im)
-  NDOM = 100
+  NDOM = 200
   zero = 13.3237
   R    = 1.0
   θ    = LinRange(0, 2pi, N+1)
@@ -30,7 +30,7 @@ begin
   # GAMMA_MAX = 30.0
     # show model
   STEP = 2.0R + R/2 # diameter  + constant
-  N_CIRCLES = (10,7)
+  N_CIRCLES = (15,7)
   RANGES = [-(N_CIRCLES[1]-1)*STEP/2:STEP:(N_CIRCLES[1]-1)*STEP/2,-(N_CIRCLES[2]-1)*STEP/2:STEP:(N_CIRCLES[2]-1)*STEP/2]
   N_STEPS =length(RANGES)
   CENTERS = vec([(i, j) for i in RANGES[1], j in RANGES[2]])
@@ -54,7 +54,8 @@ begin
 
 
   # STRENGTH[INDICES] .= rand(length(INDICES))
-  INDICES = sort([31,32,33,43,44,45,46,47,48,38,39, 40, 23, 24, 25, 26, 27, 28])
+  # INDICES = sort([31,32,33,43,44,45,46,47,48,38,39, 40, 23, 24, 25, 26, 27, 28])
+  INDICES = sort([46,47,48,49,64,65,66,67,68,69,70,71,72,57, 40,58,59,60,34,35,36,37,38,39,41, 42])
   
   deleteat!(CENTERS, INDICES)
 
@@ -78,14 +79,14 @@ begin
   arrows!(ax,[-12.0],[0.0], [-cosd(TH)],[-sind(TH)], align=:origin)
   ax.aspect=DataAspect()
   # save("docs/src/assets/photonic_diagram.png", fig)
-  save("docs/src/assets/photonic_diagram.svg", fig)
+  # save("docs/src/assets/photonic_diagram.svg", fig)
   fig
 end
 
 
 
 # domain
-x0, xf = (-15.,15.)
+x0, xf = (-22.,22.)
 y0, yf = (-10.,10.)
 xdom = LinRange(x0, xf, NDOM)
 ydom = LinRange(y0, yf, NDOM)
@@ -94,7 +95,7 @@ XDOM, YDOM = first.(COORDS)[:], last.(COORDS)[:]
 
 @inline function wave_function(_freq::Float64, _kvec::SVector{2, Float64}, _width::Float64)
   return abs2.(reshape(
-    BWM.boundaryWallWave(_freq * _kvec, (k,r)->BWM.gaussianWave(k,r - SVector(-10.25, 0.0), _width; abstol=1e-3), x, y, xm, ym, XDOM, YDOM, SIGMA, ds, rij, length(ds), N, BANDED, POTENTIAL_STRENGTH),
+    BWM.boundaryWallWave(_freq * _kvec, (k,r)->BWM.gaussianWave(k,r - SVector(-18.25, 0.0), _width; abstol=1e-3), x, y, xm, ym, XDOM, YDOM, SIGMA, ds, rij, length(ds), N, BANDED, POTENTIAL_STRENGTH),
     NDOM, NDOM
     )
   )
@@ -105,14 +106,14 @@ waves = [wave_function(f, KVEC, 4.0) for f in FREQS]
 idx_sensor = NDOM - 3
   
 begin
-  fig = Figure(theme=BWM.theme, size=(600,600))
+  fig = Figure(theme=BWM.theme, size=(900,600) .* 0.7)
   gl = fig[1,1] = GridLayout()
-  COLOR_RANGE = (0,maximum([maximum(w) for w in waves]))
+  COLOR_RANGE = (0,200)
 
   ax_l = Makie.Axis[]
   ax_r = Makie.Axis[]
-  for (i,w) in enumerate(waves)
-    ax1,hm = heatmap(gl[i,1], xdom, ydom, w, colormap=BWM.cmap, colorrange=COLOR_RANGE)
+  for (i,w) in enumerate(waves[1:end-1])
+    ax1,hm = heatmap(gl[i,1], xdom, ydom, w, colormap=:dense, colorrange=COLOR_RANGE)
     ax2,_=lines(gl[i,2], w[idx_sensor,:], ydom, color=:blue)
     append!(ax_l, [ax1])
     append!(ax_r, [ax2])
@@ -125,7 +126,7 @@ begin
     # draw circles
     for cen in CENTERS; 
       circ = BWM.createCircle(R, θ, SVector(cen));  
-      lines!(ax1, circ[1], circ[2], linestyle=:solid)
+      lines!(ax1, circ[1], circ[2], linestyle=:solid, color=:black, linewidth=1)
     end
 
     # sensor
@@ -140,12 +141,12 @@ begin
   [ax.yticksmirrored = true for ax in ax_r]
   ax_l[1].title="Density"
   ax_r[1].title="Sensor readout"
-  ax_l[3].xlabel="x"
-  ax_r[3].xlabel="ΨΨ*"
+  ax_l[2].xlabel="x"
+  ax_r[2].xlabel="ΨΨ*"
   # colgap!(fig.layout, Relative(0.02))
   # rowsize!(fig.layout,1, Aspect(1, 1.))
-  colsize!(gl,1, Aspect(1, 1.5))
-  Colorbar(fig[1,2], label="|Ψ|²", labelrotation=0, colorrange=COLOR_RANGE, colormap=BWM.cmap, ticks=(collect(COLOR_RANGE), ["min", "max"]))
+  colsize!(gl,1, Aspect(1, 2.2))
+  Colorbar(fig[1,2], label="|Ψ|²", labelrotation=0, colorrange=COLOR_RANGE, colormap=:dense, ticks=(collect(COLOR_RANGE), ["min", "max"]))
 
   # ax2 = Axis(fig[1,2], tellwidth=true)
   # heatmap!(ax, XDOM, YDOM, abs2.(reshape))
@@ -180,7 +181,7 @@ for (j,w) in enumerate(waves)
   ax,_=arrows(gl[j,1], Makie.Point2f.(XP, YP)[:],Makie.Point2f.(U,V)[:], normalize=true,arrowsize = 6, align=:center,lengthscale=0.5,color=C[:], colormap=BWM.cmap, )
   # heatmap!(ax, xdom, ydom, angle.(wave_reshaped), colormap=:twilight)
   for cen in CENTERS; 
-    circ = BWM.createCircle(R, θ, SVector(cen));  
+    circ = BWM.createCircle(R, θ, SVector(cen)); 
     lines!(ax, circ[1], circ[2], linestyle=:solid)
   end
   ax.aspect=DataAspect()
